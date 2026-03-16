@@ -85,7 +85,7 @@ const getLvl = l => LEVEL_DEFS[Math.min(l-1, LEVEL_DEFS.length-1)];
 // ─────────────────────────────────────────────────────────────────────────────
 const BASE_COSTS = {pop:1, intel:20, growth:1.15};
 const SKILLS = {
-    speed:      {label:'VITESSE',    desc:'+20% rapide/niv', maxLevel:5, baseCost:15, growth:1.8},
+    speed:      {label:'VITESSE',    desc:'+30% rapide/niv', maxLevel:5, baseCost:15, growth:1.8},
     memory:     {label:'MÉM. ADN',  desc:'ADN×2/niv',       maxLevel:4, baseCost:30, growth:2.0},
     resistance: {label:'RÉSISTANCE',desc:'Mut. -15%/niv',   maxLevel:5, baseCost:25, growth:1.7},
     sensors:    {label:'CAPTEURS',  desc:'Évite obstacles',  maxLevel:3, baseCost:50, growth:2.5},
@@ -158,7 +158,7 @@ function makeBenchDots(n){
     return Array.from({length:n}, ()=>({
         x:200+Math.random()*200, y:400+Math.random()*200,
         vx:0, vy:0, dead:false, reached:false, fit:0,
-        dna: Array.from({length:100}, ()=>({a:Math.random()*6.28, f:Math.random()*.7}))
+        dna: Array.from({length:100}, ()=>({a:Math.random()*6.28, f:Math.random()*.35}))
     }));
 }
 
@@ -273,7 +273,7 @@ function updateAQ(now){
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNTIME
 // ─────────────────────────────────────────────────────────────────────────────
-const LIFESPAN=250;
+const LIFESPAN=600;
 let   fc=0;
 const target={x:0,y:0,baseX:0,angle:0};
 let   workers=[], numW=2;
@@ -301,7 +301,7 @@ function createDot(dna=null){
         x:canvas.width/2, y:canvas.height-90,
         vx:0, vy:0, fit:0,
         dead:false, reached:false, rewarded:false,
-        dna: dna||Array.from({length:dnaLen},()=>({a:Math.random()*Math.PI*2, f:Math.random()*.7})),
+        dna: dna||Array.from({length:dnaLen},()=>({a:Math.random()*Math.PI*2, f:Math.random()*.35})),
     };
 }
 
@@ -345,7 +345,7 @@ function evolve(){
         const p=elite[Math.floor(Math.random()*elite.length)];
         return createDot(Array.from({length:dnaLen},(_,k)=>{
             const g=p.dna[k]||{a:Math.random()*Math.PI*2,f:Math.random()*.7};
-            return Math.random()<effMut?{a:Math.random()*Math.PI*2,f:Math.random()*.7}:{a:g.a,f:g.f};
+            return Math.random()<effMut?{a:Math.random()*Math.PI*2,f:Math.random()*.35}:{a:g.a,f:g.f};
         }));
     });
 
@@ -379,7 +379,7 @@ function dispatch(frame){
                 dots:payload, fc:frame,
                 tx:target.x, ty:target.y,
                 complexity:gs.complexity,
-                speedMult:skillMult('speed',.2),
+                speedMult:skillMult('speed',.3),
                 sensorMult:gs.skillLevels.sensors||0,
                 obstacles
             });
