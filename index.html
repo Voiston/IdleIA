@@ -11,11 +11,14 @@
 </head>
 <body>
     <div id="ui">
+
+        <!-- ── HEADER ── -->
         <div class="header">
             <span class="title">AI EVOLUTION ENGINE</span>
             <span id="gen-label">GEN: <span id="gen">1</span></span>
         </div>
 
+        <!-- ── STATS ── -->
         <div class="stats-grid">
             <div class="stat-box">
                 <label>DATA COLLECTÉE</label>
@@ -25,16 +28,39 @@
                 <label>PUISSANCE DE CALCUL</label>
                 <div class="value" id="gflops">0</div>
             </div>
+            <div class="stat-box">
+                <label>BOTS ARRIVÉS</label>
+                <div class="value small-value" id="reached-count">0 / 5</div>
+            </div>
+            <div class="stat-box">
+                <label>PRESTIGE</label>
+                <div class="value small-value">
+                    <span id="prestige-count">0</span>
+                    <span class="muted"> × </span>
+                    <span id="prestige-mult">1.0x</span>
+                </div>
+            </div>
         </div>
 
-        <div class="controls">
+        <!-- ── DNA DIVERSITY ── -->
+        <div class="section-label">DIVERSITÉ ADN</div>
+        <div class="dna-bar-wrap">
+            <div class="dna-bar-fill" id="dna-bar-fill"></div>
+        </div>
+        <div class="dna-value" id="dna-diversity">0%</div>
+
+        <!-- ── FITNESS GRAPH ── -->
+        <div class="section-label">FITNESS / GÉN.</div>
+        <canvas id="fitness-graph" width="192" height="50"></canvas>
+
+        <!-- ── BASE CONTROLS ── -->
+        <div class="section-label">BOTS & INTELLIGENCE</div>
+        <div class="controls-block">
             <button class="btn" id="buy-pop">
-                <span>+1 BOT</span>
-                <small>COÛT: 1 DATA</small>
+                <span>+1 BOT</span><small>COÛT: 1 DATA</small>
             </button>
             <button class="btn" id="buy-complex">
-                <span>+ INTELLIGENCE</span>
-                <small>COÛT: 20 DATA</small>
+                <span>+ INTELLIGENCE</span><small>COÛT: 20 DATA</small>
             </button>
             <div class="slider-group">
                 <label>MUTATION: <span id="mut-val">5</span>%</label>
@@ -42,14 +68,54 @@
             </div>
         </div>
 
-        <div class="footer">
-<div class="controls">
-    <button class="btn btn-danger" id="reset-game" style="margin-top: 20px; border-color: #ff4141; color: #ff4141; background: rgba(50,0,0,0.5);">
-        <span>RÉINITIALISER</span>
-        <small>EFFACER LA SAUVEGARDE</small>
-    </button>
-</div>
+        <!-- ── SKILL TREE ── -->
+        <div class="section-label">ARBRE DE COMPÉTENCES</div>
+        <div class="controls-block">
+            <button class="btn btn-skill" id="skill-speed">
+                <span>VITESSE [0/5]</span><small>Chargement…</small>
+            </button>
+            <button class="btn btn-skill" id="skill-memory">
+                <span>MÉMOIRE ADN [0/4]</span><small>Chargement…</small>
+            </button>
+            <button class="btn btn-skill" id="skill-resistance">
+                <span>RÉSISTANCE [0/5]</span><small>Chargement…</small>
+            </button>
+            <button class="btn btn-skill" id="skill-sensors">
+                <span>CAPTEURS [0/3]</span><small>Chargement…</small>
+            </button>
+        </div>
 
+        <!-- ── MARKET ── -->
+        <div class="section-label">MARCHÉ</div>
+        <div class="market-rate-row">
+            <span>TAUX:</span>
+            <span id="market-rate" class="market-rate-val">1.00x</span>
+            <span id="market-feedback" class="market-feedback"></span>
+        </div>
+        <div class="controls-block">
+            <button class="btn btn-market" id="btn-sell-gflops">
+                <span>VENDRE GFLOPS</span><small>GFLOPS → DATA</small>
+            </button>
+            <button class="btn btn-market" id="btn-buy-gflops">
+                <span>ACHETER GFLOPS</span><small>DATA → GFLOPS</small>
+            </button>
+        </div>
+
+        <!-- ── PRESTIGE ── -->
+        <div class="section-label">PRESTIGE</div>
+        <div class="controls-block">
+            <button class="btn btn-prestige-buy" id="btn-prestige">
+                <span>⬆ PRESTIGE</span><small>COÛT: 500 DATA</small>
+            </button>
+        </div>
+
+        <!-- ── FOOTER ── -->
+        <div class="footer">
+            <div class="controls-block">
+                <button class="btn btn-danger" id="reset-game">
+                    <span>RÉINITIALISER</span><small>EFFACER LA SAUVEGARDE</small>
+                </button>
+            </div>
             COEURS ACTIFS: <span id="cores">0</span>
         </div>
     </div>
@@ -60,26 +126,20 @@
     <script src="main.js"></script>
 
     <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(reg => {
-          reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log("Nouvelle version détectée, redémarrage...");
-                window.location.reload(); 
-              }
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                reg.addEventListener('updatefound', () => {
+                    const nw = reg.installing;
+                    nw.addEventListener('statechange', () => {
+                        if (nw.state === 'installed' && navigator.serviceWorker.controller) window.location.reload();
+                    });
+                });
             });
-          });
-        });
-
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (refreshing) return;
-          refreshing = true;
-          window.location.reload();
-        });
-      }
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshing) return; refreshing = true; window.location.reload();
+            });
+        }
     </script>
 </body>
 </html>
