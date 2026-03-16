@@ -16,7 +16,7 @@ let gameState = JSON.parse(localStorage.getItem('burner_save')) || {
     generation: 1
 };
 
-let lifespan = 150; 
+let lifespan = 1500; 
 let count = 0;
 let target = { x: 0, y: 80 };
 let population = [];
