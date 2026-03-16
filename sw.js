@@ -3,7 +3,7 @@
  * Gestion du cache et des mises à jour forcées
  */
 
-const CACHE_NAME = 'burner-v0.1'; // Change cette version à chaque mise à jour (ex: v1.1, v1.2)
+const CACHE_NAME = 'burner-v0.2'; // Change cette version à chaque mise à jour (ex: v1.1, v1.2)
 const ASSETS = [
   '/',
   'index.html',
