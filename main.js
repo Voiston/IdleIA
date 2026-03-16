@@ -1,11 +1,13 @@
 /**
  * AI CORE BURNER - Moteur Principal (main.js)
+ * Version : Dispersion Circulaire Totale & Multi-threading
  */
 
 const canvas = document.getElementById('sim');
 const ctx = canvas.getContext('2d');
 const numCores = navigator.hardwareConcurrency || 4;
 
+// --- ÉTAT DU JEU ---
 let gameState = JSON.parse(localStorage.getItem('burner_save')) || {
     data: 0,
     popSize: 100,
@@ -14,33 +16,33 @@ let gameState = JSON.parse(localStorage.getItem('burner_save')) || {
     generation: 1
 };
 
-// --- AJUSTEMENTS PHYSIQUES ---
-let lifespan = 150; // Augmenté pour donner une chance d'atteindre la cible
+let lifespan = 150; 
 let count = 0;
 let target = { x: 0, y: 80 };
 let population = [];
 let workers = [];
 let totalOps = 0;
 let lastTime = performance.now();
-let workerUrl = null; 
+let workerUrl = null;
 
+// --- WORKER BLOB (Logique Polaire) ---
 const workerBlob = new Blob([`
     self.onmessage = function(e) {
-        const { subPop, count, target, complexity, lifespan } = e.data;
+        const { subPop, count, target, complexity } = e.data;
         let ops = 0;
         const updated = subPop.map(dot => {
             if (dot.dead || dot.reached) return dot;
             
             for(let i=0; i<complexity; i++) {
-                // On utilise l'index count pour lire l'ADN
-                const gene = dot.dna[count] || {x:0, y:0};
-                dot.vel.x += Math.sin(gene.x) * 0.6;
-                dot.vel.y += Math.cos(gene.y) * 0.6;
-                ops += 15;
+                const gene = dot.dna[count] || {angle: 0, force: 0};
+                // Aléatoire pur : conversion angle -> vecteurs cartésiens
+                dot.vel.x += Math.cos(gene.angle) * gene.force;
+                dot.vel.y += Math.sin(gene.angle) * gene.force;
+                ops += 20; 
             }
             
-            dot.vel.x *= 0.98; // Friction légèrement augmentée
-            dot.vel.y *= 0.98;
+            dot.vel.x *= 0.96; 
+            dot.vel.y *= 0.96;
             
             dot.pos.x += dot.vel.x; 
             dot.pos.y += dot.vel.y;
@@ -52,11 +54,11 @@ const workerBlob = new Blob([`
 
             if (d < 25) dot.reached = true;
             
-            // Mort si sortie d'écran (avec marge)
-            if (dot.pos.x < -50 || dot.pos.x > 3000 || dot.pos.y < -50 || dot.pos.y > 3000) dot.dead = true;
+            // Sortie d'écran (avec marge pour les trajectoires courbes)
+            if (dot.pos.x < -100 || dot.pos.x > 4000 || dot.pos.y < -100 || dot.pos.y > 4000) dot.dead = true;
             
             dot.fitness = 1 / (d + 1);
-            if (dot.reached) dot.fitness *= 100; // Bonus de succès plus fort
+            if (dot.reached) dot.fitness *= 100; 
             
             return dot;
         });
@@ -64,13 +66,13 @@ const workerBlob = new Blob([`
     };
 `], { type: 'application/javascript' });
 
+// --- INITIALISATION ---
 function setup() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     target.x = canvas.width / 2;
     document.getElementById('cores').innerText = numCores;
     
-    // Gestion propre de l'URL du Worker
     if (workerUrl) URL.revokeObjectURL(workerUrl);
     workerUrl = URL.createObjectURL(workerBlob);
 
@@ -78,7 +80,6 @@ function setup() {
     workers = [];
     for(let i=0; i<numCores; i++) workers.push(new Worker(workerUrl));
     
-    // Si on redémarre (achat pop), on garde les anciens et on ajoute les nouveaux
     if (population.length === 0) {
         population = Array.from({length: gameState.popSize}, () => createDot());
     }
@@ -89,35 +90,36 @@ function setup() {
 
 function createDot(dna = null) {
     return {
-        pos: { x: canvas.width / 2, y: canvas.height - 100 }, // Départ un peu plus haut pour voir la dispersion
+        pos: { x: canvas.width / 2, y: canvas.height - 100 },
         vel: { x: 0, y: 0 },
-        // On génère des angles de 0 à 6.28 (2*PI) pour un aléatoire parfait sur 360°
+        // ADN : Angle (0 à 2π) et Force (0 à 1)
         dna: dna || Array.from({length: 500}, () => ({ 
             angle: Math.random() * Math.PI * 2, 
-            force: Math.random() * 0.8 // Puissance de poussée aléatoire
+            force: Math.random() * 0.8
         })),
         dead: false, reached: false, fitness: 0
     };
 }
 
-
+// --- GÉNÉTIQUE ---
 function evolve() {
     population.sort((a, b) => b.fitness - a.fitness);
     
     let newPop = [];
-    const reachedCount = population.filter(d => d.reached).length;
+    const reachedTarget = population.some(d => d.reached);
 
     for(let i = 0; i < gameState.popSize; i++) {
-        // Tournoi sur 4 individus pour une sélection plus stricte
+        // Tournoi : sélection du meilleur gène parmi 4 individus au hasard
         let candidates = Array.from({length: 4}, () => population[Math.floor(Math.random() * population.length)]);
         candidates.sort((a, b) => b.fitness - a.fitness);
         let winner = candidates[0];
 
-        let currentMutation = reachedCount > 0 ? gameState.mutationRate : 0.25;
+        // Mutation adaptive si bloqué
+        let currentMutation = reachedTarget ? gameState.mutationRate : 0.2;
 
         const newDna = winner.dna.map(g => {
             if (Math.random() < currentMutation) {
-                return { x: (Math.random()-0.5)*4, y: (Math.random()-0.5)*4 };
+                return { angle: Math.random() * Math.PI * 2, force: Math.random() * 0.8 };
             }
             return g;
         });
@@ -133,13 +135,14 @@ function save() {
     localStorage.setItem('burner_save', JSON.stringify(gameState));
 }
 
+// --- BOUCLE PRINCIPALE ---
 async function loop() {
     const segment = Math.ceil(population.length / numCores);
     const work = workers.map((w, i) => new Promise(res => {
         w.onmessage = e => res(e.data);
         w.postMessage({
             subPop: population.slice(i*segment, (i+1)*segment),
-            count, target, complexity: gameState.complexity, lifespan
+            count, target, complexity: gameState.complexity
         });
     }));
 
@@ -151,20 +154,19 @@ async function loop() {
         totalOps += r.ops;
     });
 
-    // Rendu optimisé
+    // Rendu
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    for (let i = 0; i < population.length; i++) {
-        const d = population[i];
+    for (let d of population) {
         if (!d.dead) {
             ctx.fillStyle = d.reached ? '#fff' : '#00ff41';
             ctx.fillRect(d.pos.x, d.pos.y, 2, 2);
         }
-        if (d.reached) gameState.data += 0.001; 
+        if (d.reached) gameState.data += 0.002; 
     }
 
-    // Cible lumineuse
+    // Cible
     ctx.fillStyle = 'red';
     ctx.beginPath(); ctx.arc(target.x, target.y, 15, 0, Math.PI*2); ctx.fill();
 
@@ -174,6 +176,7 @@ async function loop() {
         count = 0; 
     }
 
+    // HUD
     let now = performance.now();
     if (now - lastTime >= 1000) {
         let gflopsValue = totalOps / 1e9;
@@ -192,7 +195,7 @@ async function loop() {
     requestAnimationFrame(loop);
 }
 
-// Événements d'achat corrigés
+// --- UI ---
 document.getElementById('buy-pop').onclick = () => {
     if (gameState.data >= 10) {
         gameState.data -= 10;
@@ -208,6 +211,11 @@ document.getElementById('buy-complex').onclick = () => {
         gameState.complexity += 5;
         save();
     }
+};
+
+document.getElementById('mut-slider').oninput = (e) => {
+    gameState.mutationRate = e.target.value / 100;
+    document.getElementById('mut-val').innerText = e.target.value;
 };
 
 window.onresize = () => {
