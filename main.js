@@ -1,501 +1,494 @@
 /**
- * AI CORE - EVOLUTION V4 (main.js)
- * Mobile-first (Pixel 6a), level system, collapsible bottom panel
+ * AI CORE - EVOLUTION V5 (main.js)
+ * Optimisations : benchmark workers auto, Float32Array physique,
+ * canvas offscreen trails, LUT couleurs, particle pool, qualité adaptive
  */
+
+'use strict';
 
 const canvas = document.getElementById('sim');
 const ctx    = canvas.getContext('2d');
-const numCores = navigator.hardwareConcurrency || 4;
 
 // ── LEVEL DEFINITIONS ──────────────────────────────────────────────────────
 const LEVEL_DEFS = [
-    {
-        label: 'CHAMP LIBRE',
-        targetSpeed: 0,
-        buildObstacles(cw, ch) { return []; },
-    },
-    {
-        label: 'UN MUR',
-        targetSpeed: 0.003,
-        buildObstacles(cw, ch) {
-            const y = ch * 0.45, gapX = cw * 0.4, gapW = 120;
-            const obs = [];
-            if (gapX > 20) obs.push({ x: 0, y: y-7, w: gapX, h: 14 });
-            const rx = gapX + gapW;
-            if (rx < cw-20) obs.push({ x: rx, y: y-7, w: cw-rx, h: 14 });
-            return obs;
-        },
-    },
-    {
-        label: 'DEUX MURS',
-        targetSpeed: 0.005,
-        buildObstacles(cw, ch) {
-            const obs = [];
-            [[0.32, 0.35, 130], [0.60, 0.60, 110]].forEach(([ry, gr, gapW]) => {
-                const y = ch * ry, gapX = cw * gr;
-                if (gapX > 20) obs.push({ x: 0, y: y-7, w: gapX, h: 14 });
-                const rx = gapX + gapW;
-                if (rx < cw-20) obs.push({ x: rx, y: y-7, w: cw-rx, h: 14 });
-            });
-            return obs;
-        },
-    },
-    {
-        label: 'BRÈCHES MOUVANTES',
-        targetSpeed: 0.008,
-        buildObstacles(cw, ch) {
-            const obs = [];
-            [0.30, 0.58].forEach(ry => {
-                const y = ch * ry;
-                const gapX = cw * 0.2 + Math.random() * cw * 0.5;
-                const gapW = 85 + Math.random() * 60;
-                if (gapX > 20) obs.push({ x: 0, y: y-7, w: gapX, h: 14 });
-                const rx = gapX + gapW;
-                if (rx < cw-20) obs.push({ x: rx, y: y-7, w: cw-rx, h: 14 });
-            });
-            return obs;
-        },
-    },
-    {
-        label: 'LABYRINTHE',
-        targetSpeed: 0.012,
-        buildObstacles(cw, ch) {
-            const obs = [];
-            [0.25, 0.48, 0.68].forEach((ry, i) => {
-                const y = ch * ry;
-                const gapX = cw * (0.15 + i * 0.25 + Math.random() * 0.15);
-                const gapW = 60 + Math.random() * 40;
-                if (gapX > 20) obs.push({ x: 0, y: y-8, w: gapX, h: 16 });
-                const rx = gapX + gapW;
-                if (rx < cw-20) obs.push({ x: rx, y: y-8, w: cw-rx, h: 16 });
-            });
-            return obs;
-        },
-    },
-    {
-        label: 'CROIX DE FEU',
-        targetSpeed: 0.018,
-        buildObstacles(cw, ch) {
-            const obs = [];
-            [0.30, 0.62].forEach(ry => {
-                const y = ch * ry;
-                const gapX = cw * 0.3 + Math.random() * cw * 0.35;
-                const gapW = 50 + Math.random() * 30;
-                if (gapX > 20) obs.push({ x: 0, y: y-8, w: gapX, h: 16 });
-                const rx = gapX + gapW;
-                if (rx < cw-20) obs.push({ x: rx, y: y-8, w: cw-rx, h: 16 });
-            });
-            // mur vertical
-            const vx = cw * 0.45 + Math.random() * cw * 0.1;
-            const gapY = ch * 0.3 + Math.random() * ch * 0.25;
-            const gapH = 60 + Math.random() * 40;
-            obs.push({ x: vx-7, y: 0, w: 14, h: gapY });
-            obs.push({ x: vx-7, y: gapY+gapH, w: 14, h: ch-(gapY+gapH) });
-            return obs;
-        },
-    },
-    {
-        label: 'CHAOS',
-        targetSpeed: 0.025,
-        buildObstacles(cw, ch) {
-            const obs = [];
-            [0.22, 0.42, 0.62].forEach((ry, i) => {
-                const y = ch * ry;
-                const gapX = cw * (0.1 + i * 0.28 + Math.random() * 0.1);
-                const gapW = 45 + Math.random() * 25;
-                if (gapX > 20) obs.push({ x: 0, y: y-9, w: gapX, h: 18 });
-                const rx = gapX + gapW;
-                if (rx < cw-20) obs.push({ x: rx, y: y-9, w: cw-rx, h: 18 });
-            });
-            [0.30, 0.70].forEach(rx => {
-                const x = cw * rx;
-                const gapY = ch * 0.2 + Math.random() * ch * 0.3;
-                const gapH = 50 + Math.random() * 30;
-                obs.push({ x: x-7, y: 0, w: 14, h: gapY });
-                obs.push({ x: x-7, y: gapY+gapH, w: 14, h: ch-(gapY+gapH) });
-            });
-            return obs;
-        },
-    },
+    { label:'CHAMP LIBRE',      targetSpeed:0,     buildObstacles(w,h){return[];} },
+    { label:'UN MUR',           targetSpeed:0.003, buildObstacles(w,h){
+        const y=h*.45,gx=w*.4,gW=120,obs=[];
+        if(gx>20)obs.push({x:0,y:y-7,w:gx,h:14});
+        const rx=gx+gW; if(rx<w-20)obs.push({x:rx,y:y-7,w:w-rx,h:14});
+        return obs;
+    }},
+    { label:'DEUX MURS',        targetSpeed:0.005, buildObstacles(w,h){
+        const obs=[];
+        [[.32,.35,130],[.60,.60,110]].forEach(([ry,gr,gW])=>{
+            const y=h*ry,gx=w*gr;
+            if(gx>20)obs.push({x:0,y:y-7,w:gx,h:14});
+            const rx=gx+gW; if(rx<w-20)obs.push({x:rx,y:y-7,w:w-rx,h:14});
+        });
+        return obs;
+    }},
+    { label:'BRÈCHES MOUVANTES',targetSpeed:0.008, buildObstacles(w,h){
+        const obs=[];
+        [.30,.58].forEach(ry=>{
+            const y=h*ry,gx=w*.2+Math.random()*w*.5,gW=85+Math.random()*60;
+            if(gx>20)obs.push({x:0,y:y-7,w:gx,h:14});
+            const rx=gx+gW; if(rx<w-20)obs.push({x:rx,y:y-7,w:w-rx,h:14});
+        });
+        return obs;
+    }},
+    { label:'LABYRINTHE',       targetSpeed:0.012, buildObstacles(w,h){
+        const obs=[];
+        [.25,.48,.68].forEach((ry,i)=>{
+            const y=h*ry,gx=w*(.15+i*.25+Math.random()*.15),gW=60+Math.random()*40;
+            if(gx>20)obs.push({x:0,y:y-8,w:gx,h:16});
+            const rx=gx+gW; if(rx<w-20)obs.push({x:rx,y:y-8,w:w-rx,h:16});
+        });
+        return obs;
+    }},
+    { label:'CROIX DE FEU',     targetSpeed:0.018, buildObstacles(w,h){
+        const obs=[];
+        [.30,.62].forEach(ry=>{
+            const y=h*ry,gx=w*.3+Math.random()*w*.35,gW=50+Math.random()*30;
+            if(gx>20)obs.push({x:0,y:y-8,w:gx,h:16});
+            const rx=gx+gW; if(rx<w-20)obs.push({x:rx,y:y-8,w:w-rx,h:16});
+        });
+        const vx=w*.45+Math.random()*w*.1,gy=h*.3+Math.random()*h*.25,gH=60+Math.random()*40;
+        obs.push({x:vx-7,y:0,w:14,h:gy});
+        obs.push({x:vx-7,y:gy+gH,w:14,h:h-(gy+gH)});
+        return obs;
+    }},
+    { label:'CHAOS',            targetSpeed:0.025, buildObstacles(w,h){
+        const obs=[];
+        [.22,.42,.62].forEach((ry,i)=>{
+            const y=h*ry,gx=w*(.1+i*.28+Math.random()*.1),gW=45+Math.random()*25;
+            if(gx>20)obs.push({x:0,y:y-9,w:gx,h:18});
+            const rx=gx+gW; if(rx<w-20)obs.push({x:rx,y:y-9,w:w-rx,h:18});
+        });
+        [.30,.70].forEach(rx=>{
+            const x=w*rx,gy=h*.2+Math.random()*h*.3,gH=50+Math.random()*30;
+            obs.push({x:x-7,y:0,w:14,h:gy});
+            obs.push({x:x-7,y:gy+gH,w:14,h:h-(gy+gH)});
+        });
+        return obs;
+    }},
 ];
+function getLevelDef(lvl){ return LEVEL_DEFS[Math.min(lvl-1,LEVEL_DEFS.length-1)]; }
 
-function getLevelDef(lvl) {
-    return LEVEL_DEFS[Math.min(lvl - 1, LEVEL_DEFS.length - 1)];
-}
-
-// ── COSTS ──────────────────────────────────────────────────────────────────
-const BASE_COSTS = { pop: 1, intel: 20, growth: 1.15 };
-
-// ── SKILL TREE ─────────────────────────────────────────────────────────────
+// ── COSTS / SKILLS ─────────────────────────────────────────────────────────
+const BASE_COSTS = { pop:1, intel:20, growth:1.15 };
 const SKILLS = {
-    speed:      { label: 'VITESSE',    desc: '+20% rapide/niv', maxLevel: 5, baseCost: 15, growth: 1.8 },
-    memory:     { label: 'MÉM. ADN',  desc: 'ADN×2/niv',      maxLevel: 4, baseCost: 30, growth: 2.0 },
-    resistance: { label: 'RÉSISTANCE',desc: 'Mut. -15%/niv',  maxLevel: 5, baseCost: 25, growth: 1.7 },
-    sensors:    { label: 'CAPTEURS',  desc: 'Évite obstacles', maxLevel: 3, baseCost: 50, growth: 2.5 },
+    speed:      {label:'VITESSE',    desc:'+20% rapide/niv',maxLevel:5,baseCost:15,growth:1.8},
+    memory:     {label:'MÉM. ADN',  desc:'ADN×2/niv',      maxLevel:4,baseCost:30,growth:2.0},
+    resistance: {label:'RÉSISTANCE',desc:'Mut. -15%/niv',  maxLevel:5,baseCost:25,growth:1.7},
+    sensors:    {label:'CAPTEURS',  desc:'Évite obstacles', maxLevel:3,baseCost:50,growth:2.5},
 };
 
 // ── GAME STATE ─────────────────────────────────────────────────────────────
-let gameState = JSON.parse(localStorage.getItem('burner_save_v4')) || {};
-// Defaults / migration
 const GS_DEFAULTS = {
-    data: 0, gflopsAccum: 0,
-    popSize: 5, complexity: 1, mutationRate: 0.05,
-    generation: 1, purchasedPop: 0, purchasedIntel: 0,
-    skillLevels: { speed: 0, memory: 0, resistance: 0, sensors: 0 },
-    prestige: 0, prestigeMultiplier: 1, marketRate: 1.0,
-    level: 1, gensOnLevel: 0,
+    data:0, gflopsAccum:0, popSize:5, complexity:1, mutationRate:.05,
+    generation:1, purchasedPop:0, purchasedIntel:0,
+    skillLevels:{speed:0,memory:0,resistance:0,sensors:0},
+    prestige:0, prestigeMultiplier:1, marketRate:1.0,
+    level:1, gensOnLevel:0,
 };
-gameState = Object.assign({}, GS_DEFAULTS, gameState);
-if (!gameState.skillLevels) gameState.skillLevels = { speed:0, memory:0, resistance:0, sensors:0 };
+let gameState = Object.assign({}, GS_DEFAULTS, JSON.parse(localStorage.getItem('burner_save_v5')||'{}'));
+if(!gameState.skillLevels) gameState.skillLevels = {...GS_DEFAULTS.skillLevels};
 
-// ── RUNTIME STATE ──────────────────────────────────────────────────────────
-const LIFESPAN = 250;
-let   frameCount   = 0;          // frames within current generation
-let   target       = { x: 0, y: 0, baseX: 0, angle: 0 };
-let   population   = [];
-let   workers      = [];
-let   totalOps     = 0;
-let   lastUITime   = performance.now();
-let   workerUrl    = null;
-let   particles    = [];
-let   fitnessHistory = [];
-let   reachedThisGen = 0;
-let   obstacles    = [];
-let   marketFluctTimer = 0;
-const MARKET_INTERVAL  = 8000;
-
-// ── WORKER ─────────────────────────────────────────────────────────────────
-const workerCode = `
+// ── WORKER CODE ─────────────────────────────────────────────────────────────
+// Uses Float32Array layout: each bot = STRIDE floats
+// [px, py, vx, vy, fitness, dead(0/1), reached(0/1), rewarded(0/1)]
+// DNA stored separately as flat Float32Array [angle0,force0, angle1,force1, ...]
+const STRIDE = 8;
+const WORKER_CODE = `
+'use strict';
+const STRIDE = 8;
+// px,py,vx,vy,fitness,dead,reached,rewarded
 self.onmessage = function(e) {
-    const { subPop, frameCount, target, complexity, speedMult, sensorMult, obstacles } = e.data;
-    let ops = 0;
-    const updated = subPop.map(dot => {
-        if (dot.dead || dot.reached) return dot;
-        const gene = dot.dna[frameCount] || { angle: 0, force: 0 };
+    const {buf, dnaFlat, dnaLen, frameCount, targetX, targetY,
+           complexity, speedMult, sensorMult, obstacles, count} = e.data;
+    const bots = new Float32Array(buf);
+    const n    = count; // number of bots in this slice
+    let ops    = 0;
+
+    for(let i=0; i<n; i++){
+        const b = i*STRIDE;
+        if(bots[b+5]>0 || bots[b+6]>0) continue; // dead or reached
+
+        const gi = (frameCount % dnaLen) * 2;
+        const dnaOff = i * dnaLen * 2;
+        const angle = dnaFlat[dnaOff + gi];
+        const force = dnaFlat[dnaOff + gi + 1];
         ops += 5;
 
-        const dx = target.x - dot.pos.x;
-        const dy = target.y - dot.pos.y;
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const dx = targetX - bots[b];
+        const dy = targetY - bots[b+1];
+        const dist = Math.sqrt(dx*dx+dy*dy) || 1;
 
-        // Magnetic pull toward target
-        dot.vel.x += (dx/dist) * complexity * 0.005;
-        dot.vel.y += (dy/dist) * complexity * 0.005;
+        bots[b+2] += (dx/dist)*complexity*0.005;
+        bots[b+3] += (dy/dist)*complexity*0.005;
         ops += 20;
 
-        // Sensor repulsion from obstacles
-        if (sensorMult > 0) {
-            for (const ob of obstacles) {
-                const cx = ob.x + ob.w*0.5, cy = ob.y + ob.h*0.5;
-                const odx = dot.pos.x - cx, ody = dot.pos.y - cy;
-                const od = Math.sqrt(odx*odx + ody*ody) || 1;
-                if (od < 90) {
-                    dot.vel.x += (odx/od) * sensorMult * 0.6;
-                    dot.vel.y += (ody/od) * sensorMult * 0.6;
+        if(sensorMult>0){
+            for(const ob of obstacles){
+                const cx=ob.x+ob.w*.5, cy=ob.y+ob.h*.5;
+                const odx=bots[b]-cx, ody=bots[b+1]-cy;
+                const od=Math.sqrt(odx*odx+ody*ody)||1;
+                if(od<90){
+                    bots[b+2]+=(odx/od)*sensorMult*0.6;
+                    bots[b+3]+=(ody/od)*sensorMult*0.6;
                 }
             }
         }
 
-        // DNA gene
-        dot.vel.x += Math.cos(gene.angle) * gene.force;
-        dot.vel.y += Math.sin(gene.angle) * gene.force;
-
-        // Damping + movement
-        dot.vel.x *= 0.96;
-        dot.vel.y *= 0.96;
-        dot.pos.x += dot.vel.x * (speedMult || 1);
-        dot.pos.y += dot.vel.y * (speedMult || 1);
+        bots[b+2] += Math.cos(angle)*force;
+        bots[b+3] += Math.sin(angle)*force;
+        bots[b+2] *= 0.96;
+        bots[b+3] *= 0.96;
+        bots[b]   += bots[b+2]*(speedMult||1);
+        bots[b+1] += bots[b+3]*(speedMult||1);
         ops += 10;
 
-        // Obstacle collision
-        for (const ob of obstacles) {
-            if (dot.pos.x >= ob.x && dot.pos.x <= ob.x + ob.w &&
-                dot.pos.y >= ob.y && dot.pos.y <= ob.y + ob.h) {
-                dot.dead = true; break;
-            }
+        // obstacle collision
+        for(const ob of obstacles){
+            if(bots[b]>=ob.x && bots[b]<=ob.x+ob.w &&
+               bots[b+1]>=ob.y && bots[b+1]<=ob.y+ob.h){ bots[b+5]=1; break; }
         }
-
-        // Bounds / reached
-        if (!dot.dead && dist < 25) dot.reached = true;
-        if (dot.pos.x < -100 || dot.pos.x > 5000 || dot.pos.y < -100 || dot.pos.y > 5000) dot.dead = true;
-
-        dot.fitness = dot.reached ? 2 : (1 / (dist + 1));
-
-        // Trail
-        if (!dot.trail) dot.trail = [];
-        dot.trail.push({ x: dot.pos.x, y: dot.pos.y });
-        if (dot.trail.length > 20) dot.trail.shift();
-
-        return dot;
-    });
-    self.postMessage({ updated, ops });
+        // bounds
+        if(bots[b]<-100||bots[b]>5000||bots[b+1]<-100||bots[b+1]>5000) bots[b+5]=1;
+        // reached
+        if(dist<25) bots[b+6]=1;
+        // fitness
+        bots[b+4] = bots[b+6]>0 ? 2 : (1/(dist+1));
+    }
+    // transfer buffer back
+    self.postMessage({buf, ops}, [buf]);
 };
 `;
-const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
 
-// ── HELPERS ────────────────────────────────────────────────────────────────
-function getPopCost()             { return Math.floor(BASE_COSTS.pop   * Math.pow(BASE_COSTS.growth, gameState.purchasedPop)); }
-function getIntelCost()           { return Math.floor(BASE_COSTS.intel * Math.pow(BASE_COSTS.growth, gameState.purchasedIntel)); }
-function skillCost(id)            { const s=SKILLS[id]; return Math.floor(s.baseCost * Math.pow(s.growth, gameState.skillLevels[id]||0)); }
-function skillMult(id, perLvl)   { return 1 + (gameState.skillLevels[id]||0) * perLvl; }
-function getDnaLength()           { return 1000 * Math.pow(2, gameState.skillLevels.memory||0); }
-function prestigeCost()           { return Math.floor(500 * Math.pow(3, gameState.prestige)); }
-function gensRequired(lvl)        { return 3 + lvl * 2; }
+// ── WORKER BENCHMARK ───────────────────────────────────────────────────────
+const WORKER_BLOB = new Blob([WORKER_CODE], {type:'application/javascript'});
+const WORKER_URL  = URL.createObjectURL(WORKER_BLOB);
 
-// ── LEVEL SYSTEM ───────────────────────────────────────────────────────────
-function applyLevel(lvl) {
-    obstacles = getLevelDef(lvl).buildObstacles(canvas.width, canvas.height);
-    document.getElementById('level-display').innerText  = lvl;
-    document.getElementById('level-display2').innerText = lvl;
+// Micro-benchmark: simulate N bots for F frames with W workers, return ms/frame
+function benchmarkWorkers(numW, numBots, frames) {
+    return new Promise(resolve => {
+        const dnaLen = 200;
+        const bots   = new Float32Array(numBots * STRIDE);
+        const dna    = new Float32Array(numBots * dnaLen * 2);
+        for(let i=0;i<numBots;i++){
+            bots[i*STRIDE]   = 200 + Math.random()*200;
+            bots[i*STRIDE+1] = 400 + Math.random()*200;
+            for(let k=0;k<dnaLen*2;k++) dna[i*dnaLen*2+k]=Math.random()*6.28;
+        }
+        const ws = Array.from({length:numW},()=>new Worker(WORKER_URL));
+        let   f  = 0;
+        const start = performance.now();
+
+        function runFrame() {
+            if(f >= frames){ 
+                const elapsed = performance.now()-start;
+                ws.forEach(w=>w.terminate());
+                resolve(elapsed/frames);
+                return;
+            }
+            const seg = Math.ceil(numBots/numW);
+            let done  = 0;
+            // We need to work with copies since we can't split a SAB here
+            const results = new Float32Array(numBots*STRIDE);
+            for(let i=0;i<numW;i++){
+                const start_i = i*seg, end_i = Math.min(start_i+seg, numBots);
+                const count   = end_i-start_i;
+                if(count<=0){ done++; if(done===numW){results.set(bots);f++;runFrame();} continue; }
+                const sliceBuf = new Float32Array(count*STRIDE);
+                sliceBuf.set(bots.slice(start_i*STRIDE, end_i*STRIDE));
+                const dnaSlice = new Float32Array(dna.slice(start_i*dnaLen*2, end_i*dnaLen*2));
+                ws[i].onmessage = (e)=>{
+                    results.set(new Float32Array(e.data.buf), start_i*STRIDE);
+                    done++;
+                    if(done===numW){
+                        bots.set(results);
+                        f++;
+                        runFrame();
+                    }
+                };
+                ws[i].postMessage({
+                    buf:sliceBuf.buffer, dnaFlat:dnaSlice, dnaLen,
+                    frameCount:f, targetX:300, targetY:100,
+                    complexity:1, speedMult:1, sensorMult:0,
+                    obstacles:[], count
+                }, [sliceBuf.buffer]);
+            }
+        }
+        runFrame();
+    });
 }
 
-function tryLevelUp() {
-    gameState.gensOnLevel++;
-    if (gameState.gensOnLevel >= gensRequired(gameState.level)) {
-        gameState.level++;
-        gameState.gensOnLevel = 0;
-        applyLevel(gameState.level);
-        showLevelBanner(gameState.level);
-        gameState.data += gameState.level * 5 * gameState.prestigeMultiplier;
+async function autoSelectWorkers() {
+    const cached = localStorage.getItem('burner_worker_count');
+    if(cached){ return parseInt(cached); }
+
+    showBenchmarkOverlay(true);
+    const maxW   = Math.min(navigator.hardwareConcurrency||4, 6);
+    const BOTS   = 80, FRAMES = 12;
+    const results = {};
+
+    for(let w=1; w<=maxW; w++){
+        results[w] = await benchmarkWorkers(w, BOTS, FRAMES);
+    }
+
+    // Find fastest (lowest ms/frame)
+    let best=1, bestMs=Infinity;
+    for(const [w,ms] of Object.entries(results)){
+        if(ms<bestMs){ bestMs=ms; best=parseInt(w); }
+    }
+
+    localStorage.setItem('burner_worker_count', best);
+    showBenchmarkOverlay(false);
+    console.log('[BENCH] Worker results (ms/frame):', results, '→ best:', best);
+    return best;
+}
+
+function showBenchmarkOverlay(show){
+    let el = document.getElementById('bench-overlay');
+    if(!el){
+        el = document.createElement('div');
+        el.id = 'bench-overlay';
+        el.style.cssText = `position:fixed;inset:0;z-index:999;background:rgba(4,12,4,.95);
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            color:#00ff41;font-family:Consolas,monospace;font-size:13px;letter-spacing:2px;`;
+        el.innerHTML = `<div style="font-size:18px;margin-bottom:12px;text-shadow:0 0 12px #00ff41">⚙ CALIBRATION</div>
+            <div style="opacity:.6">Optimisation du nombre de workers…</div>`;
+        document.body.appendChild(el);
+    }
+    el.style.display = show ? 'flex' : 'none';
+}
+
+// ── RUNTIME STATE ──────────────────────────────────────────────────────────
+const LIFESPAN = 250;
+let frameCount  = 0;
+let target      = {x:0,y:0,baseX:0,angle:0};
+let workers     = [];
+let numWorkers  = 2; // will be set by benchmark
+let totalOps    = 0;
+let lastUITime  = performance.now();
+let obstacles   = [];
+let marketTimer = 0;
+const MARKET_MS = 8000;
+let reachedThisGen = 0;
+let fitnessHistory = [];
+
+// ── POPULATION : Float32Array storage ─────────────────────────────────────
+let popSize   = 0;       // current number of bots
+let botBuf    = null;    // Float32Array(popSize * STRIDE)  — positions/state
+let dnaBuf    = null;    // Float32Array(popSize * dnaLen * 2) — flat DNA
+let dnaLen    = 1000;    // genes per bot
+// Trail storage: circular buffer per bot, length TRAIL_LEN
+const TRAIL_LEN = 18;
+let trailX    = null;    // Float32Array(popSize * TRAIL_LEN)
+let trailY    = null;    // Float32Array(popSize * TRAIL_LEN)
+let trailHead = null;    // Int32Array(popSize) — circular buffer head index
+let trailFill = null;    // Int32Array(popSize) — how many points are filled
+
+// ── OFFSCREEN TRAIL CANVAS ─────────────────────────────────────────────────
+let trailCanvas = null, trailCtx = null;
+
+// ── COLOR LUT ──────────────────────────────────────────────────────────────
+// 256 pre-rendered color strings for fitness [0..1] mapped to [0..255]
+const COLOR_LUT = Array.from({length:256}, (_,i) => {
+    const hue = 130 + (i/255)*60;  // green → yellow
+    return `hsl(${hue|0},100%,50%)`;
+});
+// Elite color precomputed
+const COLOR_ELITE = '#00ffff';
+const COLOR_REACHED = '#ffffff';
+
+// ── PARTICLE POOL ──────────────────────────────────────────────────────────
+const PART_MAX = 256;
+const partX    = new Float32Array(PART_MAX);
+const partY    = new Float32Array(PART_MAX);
+const partVX   = new Float32Array(PART_MAX);
+const partVY   = new Float32Array(PART_MAX);
+const partLife = new Float32Array(PART_MAX);
+const partDecay= new Float32Array(PART_MAX);
+let   partAlive= new Uint8Array(PART_MAX);   // 1 = alive
+let   partCount= 0;
+
+function spawnParticles(x, y){
+    let spawned = 0;
+    for(let i=0;i<PART_MAX && spawned<16;i++){
+        if(partAlive[i]) continue;
+        const a=Math.random()*Math.PI*2, s=1+Math.random()*3;
+        partX[i]=x; partY[i]=y;
+        partVX[i]=Math.cos(a)*s; partVY[i]=Math.sin(a)*s;
+        partLife[i]=1; partDecay[i]=.04+Math.random()*.04;
+        partAlive[i]=1; partCount++; spawned++;
     }
 }
-
-function showLevelBanner(lvl) {
-    const def    = getLevelDef(lvl);
-    const banner = document.getElementById('level-banner');
-    const txt    = document.getElementById('level-banner-text');
-    txt.innerText = `NIVEAU ${lvl} — ${def.label}`;
-    banner.classList.remove('hidden', 'fade-out');
-    setTimeout(() => {
-        banner.classList.add('fade-out');
-        setTimeout(() => banner.classList.add('hidden'), 600);
-    }, 2200);
-}
-
-function refreshObstacles() {
-    obstacles = getLevelDef(gameState.level).buildObstacles(canvas.width, canvas.height);
-}
-
-// ── PARTICLES ──────────────────────────────────────────────────────────────
-function spawnParticles(x, y) {
-    for (let i = 0; i < 16; i++) {
-        const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 3;
-        particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 1, decay: 0.04 + Math.random()*0.04 });
+function tickParticles(){
+    for(let i=0;i<PART_MAX;i++){
+        if(!partAlive[i]) continue;
+        partX[i]+=partVX[i]; partY[i]+=partVY[i];
+        partVX[i]*=.92; partVY[i]*=.92;
+        partLife[i]-=partDecay[i];
+        if(partLife[i]<=0){ partAlive[i]=0; partCount--; }
     }
 }
-function tickParticles() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx; p.y += p.vy; p.vx *= 0.92; p.vy *= 0.92; p.life -= p.decay;
-        if (p.life <= 0) particles.splice(i, 1);
-    }
-}
-function drawParticles() {
-    for (const p of particles) {
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = `hsl(${180 + p.life * 60}, 100%, 70%)`;
-        ctx.fillRect(p.x - 1, p.y - 1, 3, 3);
+function drawParticles(){
+    if(!partCount) return;
+    for(let i=0;i<PART_MAX;i++){
+        if(!partAlive[i]) continue;
+        ctx.globalAlpha = partLife[i];
+        ctx.fillStyle   = COLOR_LUT[Math.min(255,(partLife[i]*255)|0)];
+        ctx.fillRect(partX[i]-1, partY[i]-1, 3, 3);
     }
     ctx.globalAlpha = 1;
 }
 
-// ── DNA DIVERSITY ──────────────────────────────────────────────────────────
-function computeDiversity() {
-    if (population.length < 2) return 0;
-    const sample = population.slice(0, Math.min(8, population.length));
-    let diffs = 0, n = 0;
-    for (let i = 0; i < sample.length - 1; i++) {
-        for (let j = i + 1; j < sample.length; j++) {
-            const len = Math.min(sample[i].dna.length, sample[j].dna.length, 40);
-            for (let k = 0; k < len; k++) {
-                diffs += (Math.abs(sample[i].dna[k].angle - sample[j].dna[k].angle) / (Math.PI*2)
-                        + Math.abs(sample[i].dna[k].force - sample[j].dna[k].force) / 0.7) / 2;
+// ── ADAPTIVE QUALITY ───────────────────────────────────────────────────────
+let aq = { trailLen:TRAIL_LEN, shadowElite:true, particles:true, fps:60 };
+const fpsWindow = new Float32Array(30); let fpsWi=0, fpsWFull=false;
+let lastFrameTime = performance.now();
+
+function updateAdaptiveQuality(now){
+    const dt = now - lastFrameTime;
+    lastFrameTime = now;
+    if(dt<=0||dt>500) return;
+    fpsWindow[fpsWi%30] = 1000/dt;
+    fpsWi++; if(fpsWi>=30) fpsWFull=true;
+    if(!fpsWFull && fpsWi<15) return;
+    const len = fpsWFull?30:fpsWi;
+    let sum=0; for(let i=0;i<len;i++) sum+=fpsWindow[i];
+    aq.fps = sum/len;
+
+    if(aq.fps < 45){
+        aq.trailLen    = Math.max(6, aq.trailLen-2);
+        aq.shadowElite = false;
+        aq.particles   = aq.fps > 35;
+    } else if(aq.fps > 55){
+        aq.trailLen    = Math.min(TRAIL_LEN, aq.trailLen+1);
+        aq.shadowElite = true;
+        aq.particles   = true;
+    }
+}
+
+// ── HELPERS ────────────────────────────────────────────────────────────────
+function getPopCost()          { return Math.floor(BASE_COSTS.pop*Math.pow(BASE_COSTS.growth,gameState.purchasedPop)); }
+function getIntelCost()        { return Math.floor(BASE_COSTS.intel*Math.pow(BASE_COSTS.growth,gameState.purchasedIntel)); }
+function skillCost(id)         { const s=SKILLS[id]; return Math.floor(s.baseCost*Math.pow(s.growth,gameState.skillLevels[id]||0)); }
+function skillMult(id,perLvl)  { return 1+(gameState.skillLevels[id]||0)*perLvl; }
+function getDnaLength()        { return 1000*Math.pow(2,gameState.skillLevels.memory||0); }
+function prestigeCost()        { return Math.floor(500*Math.pow(3,gameState.prestige)); }
+function gensRequired(lvl)     { return 3+lvl*2; }
+
+// ── POPULATION ALLOC ───────────────────────────────────────────────────────
+function allocPopulation(n, newDnaLen){
+    popSize = n;
+    dnaLen  = newDnaLen;
+    botBuf  = new Float32Array(n * STRIDE);
+    dnaBuf  = new Float32Array(n * dnaLen * 2);
+    trailX  = new Float32Array(n * TRAIL_LEN);
+    trailY  = new Float32Array(n * TRAIL_LEN);
+    trailHead = new Int32Array(n);
+    trailFill = new Int32Array(n);
+}
+
+function initBotPos(i){
+    const b = i*STRIDE;
+    botBuf[b]   = canvas.width/2  + (Math.random()-.5)*10;
+    botBuf[b+1] = canvas.height-90 + (Math.random()-.5)*10;
+    botBuf[b+2] = 0; botBuf[b+3]=0; botBuf[b+4]=0;
+    botBuf[b+5] = 0; botBuf[b+6]=0; botBuf[b+7]=0;
+    trailHead[i]=0; trailFill[i]=0;
+}
+function initBotDnaRandom(i){
+    const off = i*dnaLen*2;
+    for(let k=0;k<dnaLen*2;k++) dnaBuf[off+k]=Math.random()*Math.PI*2;
+    // force values at odd indices should be 0..0.7, angles at even 0..2π
+    for(let k=0;k<dnaLen;k++){
+        dnaBuf[off+k*2+1] = Math.random()*0.7; // force
+    }
+}
+
+function createPopulation(n, parentBotBuf=null, parentDnaBuf=null, parentN=0){
+    allocPopulation(n, getDnaLength());
+    for(let i=0;i<n;i++){
+        initBotPos(i);
+        if(!parentDnaBuf){ initBotDnaRandom(i); }
+        else {
+            // pick random parent from top 20%
+            const elite = Math.max(1,Math.floor(parentN*.2));
+            const pi    = Math.floor(Math.random()*elite);
+            const srcOff= pi*parentDnaBuf.length/parentN;  // approximate — recalc below
+            const pOff  = pi * (parentDnaBuf.length/parentN|0);
+            const dOff  = i  * dnaLen*2;
+            const pDnaLen = parentDnaBuf.length/parentN|0;
+            const effMut = gameState.mutationRate*(1-(gameState.skillLevels.resistance||0)*.15);
+            for(let k=0;k<dnaLen;k++){
+                if(Math.random()<effMut){
+                    dnaBuf[dOff+k*2]   = Math.random()*Math.PI*2;
+                    dnaBuf[dOff+k*2+1] = Math.random()*0.7;
+                } else {
+                    const srcK = k < pDnaLen/2 ? k : k % (pDnaLen/2|0);
+                    dnaBuf[dOff+k*2]   = parentDnaBuf[pOff+srcK*2]  || Math.random()*Math.PI*2;
+                    dnaBuf[dOff+k*2+1] = parentDnaBuf[pOff+srcK*2+1]|| Math.random()*0.7;
+                }
             }
-            n += len;
         }
     }
-    return n > 0 ? Math.min(1, diffs / n) : 0;
 }
 
-// ── FITNESS GRAPH ──────────────────────────────────────────────────────────
-function drawFitnessGraph() {
-    const gc = document.getElementById('fitness-graph');
-    if (!gc) return;
-    gc.width = gc.offsetWidth || 340;
-    const c = gc.getContext('2d'), w = gc.width, h = gc.height;
-    c.clearRect(0, 0, w, h);
-    c.fillStyle = 'rgba(0,0,0,0.5)'; c.fillRect(0, 0, w, h);
-    if (fitnessHistory.length < 2) return;
-    const maxF = Math.max(...fitnessHistory, 0.01);
-    c.strokeStyle = '#00ff41'; c.lineWidth = 1.5;
-    c.shadowBlur = 4; c.shadowColor = '#00ff41';
-    c.beginPath();
-    fitnessHistory.forEach((v, i) => {
-        const x = (i / (fitnessHistory.length - 1)) * w;
-        const y = h - (v / maxF) * h * 0.88 - 2;
-        i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-    });
-    c.stroke(); c.shadowBlur = 0;
+// ── TRAIL PUSH ─────────────────────────────────────────────────────────────
+function pushTrail(i, x, y){
+    const head = trailHead[i];
+    trailX[i*TRAIL_LEN+head] = x;
+    trailY[i*TRAIL_LEN+head] = y;
+    trailHead[i] = (head+1) % TRAIL_LEN;
+    if(trailFill[i] < TRAIL_LEN) trailFill[i]++;
 }
 
-// ── UI UPDATE ──────────────────────────────────────────────────────────────
-function updateUI() {
-    document.getElementById('data').innerHTML           = Formatter.format(gameState.data);
-    document.getElementById('gflops').innerHTML         = Formatter.format(totalOps, 'F');
-    document.getElementById('gen').innerText            = gameState.generation;
-    document.getElementById('reached-count').innerText  = `${reachedThisGen}/${gameState.popSize}`;
-    document.getElementById('prestige-mult').innerText  = gameState.prestigeMultiplier.toFixed(1);
-    document.getElementById('prestige-mult2').innerText = gameState.prestigeMultiplier.toFixed(1) + 'x';
-    document.getElementById('prestige-count').innerText = gameState.prestige;
-    document.getElementById('cores').innerText          = numCores;
-    document.getElementById('market-rate').innerText    = gameState.marketRate.toFixed(2) + 'x';
-    document.getElementById('gflops-stored').innerText  = (gameState.gflopsAccum || 0).toFixed(2);
-    document.getElementById('level-display').innerText  = gameState.level;
-    document.getElementById('level-display2').innerText = gameState.level;
-
-    const div = computeDiversity();
-    const divPct = (div * 100).toFixed(0) + '%';
-    document.getElementById('dna-bar-fill').style.width  = divPct;
-    document.getElementById('dna-bar-fill2').style.width = divPct;
-    document.getElementById('dna-diversity').innerText   = divPct;
-
-    // pop / intel
-    const pCostPop = getPopCost(), pCostInt = getIntelCost();
-    const btnPop = document.getElementById('buy-pop');
-    btnPop.querySelector('span').innerText  = '+1 BOT';
-    btnPop.querySelector('small').innerText = `COÛT: ${pCostPop}`;
-    btnPop.disabled = gameState.data < pCostPop;
-
-    const btnInt = document.getElementById('buy-complex');
-    btnInt.querySelector('span').innerText  = '+INTEL';
-    btnInt.querySelector('small').innerText = `COÛT: ${pCostInt}`;
-    btnInt.disabled = gameState.data < pCostInt;
-
-    // prestige
-    const pCost = prestigeCost();
-    document.getElementById('prestige-cost').innerText  = `COÛT: ${pCost}`;
-    document.getElementById('btn-prestige').disabled    = gameState.data < pCost;
-
-    // skills
-    for (const id of Object.keys(SKILLS)) {
-        const sk = SKILLS[id], lvl = gameState.skillLevels[id]||0, cost = skillCost(id);
-        const btn = document.getElementById('skill-' + id);
-        if (!btn) continue;
-        if (lvl >= sk.maxLevel) {
-            btn.querySelector('span').innerText  = `${sk.label} ✓`;
-            btn.querySelector('small').innerText = sk.desc;
-            btn.disabled = true;
-        } else {
-            btn.querySelector('span').innerText  = `${sk.label} [${lvl}/${sk.maxLevel}]`;
-            btn.querySelector('small').innerText = `COÛT: ${cost}`;
-            btn.disabled = gameState.data < cost;
-        }
-    }
-
-    drawFitnessGraph();
-    totalOps = 0;
+// ── LEVEL SYSTEM ───────────────────────────────────────────────────────────
+function applyLevel(lvl){
+    obstacles = getLevelDef(lvl).buildObstacles(canvas.width, canvas.height);
+    document.getElementById('level-display').innerText  = lvl;
+    document.getElementById('level-display2').innerText = lvl;
 }
-
-// ── MARKET ─────────────────────────────────────────────────────────────────
-function fluctuateMarket(dt) {
-    marketFluctTimer += dt;
-    if (marketFluctTimer >= MARKET_INTERVAL) {
-        gameState.marketRate = parseFloat((0.4 + Math.random() * 2.2).toFixed(2));
-        marketFluctTimer = 0;
+function tryLevelUp(){
+    gameState.gensOnLevel++;
+    if(gameState.gensOnLevel >= gensRequired(gameState.level)){
+        gameState.level++;
+        gameState.gensOnLevel=0;
+        applyLevel(gameState.level);
+        showLevelBanner(gameState.level);
+        gameState.data += gameState.level*5*gameState.prestigeMultiplier;
     }
 }
-
-// ── SETUP ──────────────────────────────────────────────────────────────────
-function setup() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-    target.baseX  = canvas.width / 2;
-    target.x      = target.baseX;
-    target.y      = 90;
-
-    // Create workers
-    workerUrl = URL.createObjectURL(workerBlob);
-    for (let i = 0; i < numCores; i++) workers.push(new Worker(workerUrl));
-
-    // Init population AFTER canvas size is set
-    population = Array.from({ length: gameState.popSize }, () => createDot());
-
-    // Obstacles depend on canvas size — call after setup
-    applyLevel(gameState.level);
-
-    updateUI();
-}
-
-function createDot(dna = null) {
-    const dnaLen = getDnaLength();
-    return {
-        pos:     { x: canvas.width / 2, y: canvas.height - 90 },
-        vel:     { x: 0, y: 0 },
-        dna:     dna || Array.from({ length: dnaLen }, () => ({
-                     angle: Math.random() * Math.PI * 2,
-                     force: Math.random() * 0.7,
-                 })),
-        dead: false, reached: false, fitness: 0, rewarded: false, trail: [],
-    };
+function showLevelBanner(lvl){
+    const def=getLevelDef(lvl);
+    const banner=document.getElementById('level-banner');
+    const txt=document.getElementById('level-banner-text');
+    txt.innerText=`NIVEAU ${lvl} — ${def.label}`;
+    banner.classList.remove('hidden','fade-out');
+    setTimeout(()=>{ banner.classList.add('fade-out'); setTimeout(()=>banner.classList.add('hidden'),600); },2200);
 }
 
 // ── EVOLVE ─────────────────────────────────────────────────────────────────
-function evolve() {
-    const avgFitness = population.reduce((s, d) => s + d.fitness, 0) / population.length;
-    fitnessHistory.push(avgFitness);
-    if (fitnessHistory.length > 60) fitnessHistory.shift();
+function evolve(){
+    // compute avg fitness from botBuf
+    let sumF=0;
+    for(let i=0;i<popSize;i++) sumF+=botBuf[i*STRIDE+4];
+    fitnessHistory.push(sumF/popSize);
+    if(fitnessHistory.length>60) fitnessHistory.shift();
 
-    population.sort((a, b) => b.fitness - a.fitness);
-    const elite  = population.slice(0, Math.max(1, Math.floor(gameState.popSize * 0.2)));
-    const effMut = gameState.mutationRate * (1 - (gameState.skillLevels.resistance || 0) * 0.15);
-    const dnaLen = getDnaLength();
+    // sort indices by fitness desc
+    const idx = Array.from({length:popSize},(_,i)=>i);
+    idx.sort((a,b)=>botBuf[b*STRIDE+4]-botBuf[a*STRIDE+4]);
 
-    population = Array.from({ length: gameState.popSize }, () => {
-        const parent = elite[Math.floor(Math.random() * elite.length)];
-        return createDot(Array.from({ length: dnaLen }, (_, k) => {
-            const g = parent.dna[k] || { angle: Math.random()*Math.PI*2, force: Math.random()*0.7 };
-            return Math.random() < effMut
-                ? { angle: Math.random()*Math.PI*2, force: Math.random()*0.7 }
-                : { angle: g.angle, force: g.force };
-        }));
-    });
+    // copy elite DNA into a temp buffer
+    const elite     = idx.slice(0, Math.max(1,Math.floor(popSize*.2)));
+    const newDnaLen = getDnaLength();
+    const n         = gameState.popSize;
+    const newDna    = new Float32Array(n*newDnaLen*2);
+    const effMut    = gameState.mutationRate*(1-(gameState.skillLevels.resistance||0)*.15);
 
-    reachedThisGen = 0;
-    gameState.generation++;
-
-    // Level progression check (before obstacle refresh)
-    tryLevelUp();
-
-    // Refresh obstacle gaps every 5 gens on same level (skip gen 0)
-    if (gameState.gensOnLevel > 0 && gameState.gensOnLevel % 5 === 0) {
-        refreshObstacles();
-    }
-
-    save();
-}
-
-// ── ASYNC WORKER DISPATCH ──────────────────────────────────────────────────
-function dispatchWorkers() {
-    const fc = frameCount; // capture current frame before any async gap
-    const speedMult  = skillMult('speed', 0.2);
-    const sensorMult = gameState.skillLevels.sensors || 0;
-    const popLen     = population.length;
-    const segment    = Math.ceil(popLen / numCores);
-
-    // Build per-worker promises; guard empty segments
-    const promises = [];
-    for (let i = 0; i < numCores; i++) {
-        const slice = population.slice(i * segment, (i + 1) * segment);
-        if (slice.length === 0) {
-            promises.push(Promise.resolve({ updated: [], ops: 0 }));
-            continue;
-        }
-        promises.push(new Promise(resolve => {
-            workers[i].onmessage = e => resolve(e.data);
-            workers[i].postMessage({
-                subPop: slice,
-                frameCount: fc,
-                target: { x: target.x, y: target.y },
-                complexity: gameState.complexity,
-                speedMult,
-        
+    for(let i=0;i<n;i++){
+        const pi   = e
