@@ -52,11 +52,22 @@
 
     <script src="main.js"></script>
 
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
+
+ if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // Une mise à jour est disponible et installée
+          console.log("Nouvelle version détectée, redémarrage...");
+          window.location.reload(); 
+        }
+      });
+    });
+  });
+}
+
 
 </body>
 </html>
