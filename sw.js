@@ -3,33 +3,35 @@
  * Gestion du cache et des mises à jour forcées
  */
 
-const CACHE_NAME = 'burner-v0.8'; // Change cette version à chaque mise à jour (ex: v1.1, v1.2)
+const CACHE_NAME = 'burner-v0.9'; // Incrémenté pour forcer la mise à jour
 const ASSETS = [
-  '/',
+  './',
   'index.html',
   'style.css',
   'main.js',
+  'formatter.js', // <--- IMPORTANT : Ne pas oublier ce nouveau fichier !
   'manifest.json'
 ];
 
 // 1. Installation : Mise en cache des fichiers
 self.addEventListener('install', (event) => {
   console.log('[SW] Installation du nouveau cache:', CACHE_NAME);
-  
-  // Force le Service Worker à devenir actif sans attendre la fermeture des onglets
+
+  // Force le Service Worker à devenir actif sans attendre
   self.skipWaiting();
 
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
+      // On utilise addAll pour s'assurer que TOUS les fichiers sont là
       return cache.addAll(ASSETS);
-    })
+    }).catch(err => console.error('[SW] Erreur de mise en cache:', err))
   );
 });
 
 // 2. Activation : Nettoyage des anciens caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activation et nettoyage des anciens caches...');
-  
+  console.log('[SW] Activation et nettoyage...');
+
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -41,27 +43,20 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      // Prend le contrôle des pages immédiatement après l'activation
+      // Prend le contrôle des pages immédiatement
       return self.clients.claim();
     })
   );
 });
 
-// 3. Stratégie de Fetch : Cache avec repli sur le réseau
+// 3. Stratégie de Fetch : Cache First (Priorité au Cache pour la rapidité)
 self.addEventListener('fetch', (event) => {
-  // Optionnel : On peut ignorer les requêtes vers les APIs externes si besoin
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      
-      // Si pas en cache, on va sur le réseau
-      return fetch(event.request).catch(() => {
-        // Optionnel : ici on pourrait retourner une page "offline.html"
-      });
+      // Si le fichier est en cache, on le sert, sinon on demande au réseau
+      return cachedResponse || fetch(event.request);
     })
   );
 });
