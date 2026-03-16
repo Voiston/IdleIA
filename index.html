@@ -3,202 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Core AI Burner</title>
-    <style>
-        body { margin: 0; background: #0a0a0a; color: #00ff41; font-family: 'Segoe UI', monospace; overflow: hidden; }
-        canvas { display: block; filter: contrast(1.2) brightness(1.2); }
-        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 15px; border: 2px solid #00ff41; border-radius: 8px; width: 220px; box-shadow: 0 0 20px rgba(0,255,65,0.2); }
-        .stat { margin-bottom: 5px; font-size: 14px; }
-        #gflops { color: #ff4444; font-size: 1.4em; font-weight: bold; }
-        .btn { background: #00ff41; color: black; border: none; padding: 8px; margin-top: 8px; cursor: pointer; font-weight: bold; width: 100%; text-transform: uppercase; }
-        .btn:disabled { background: #1a3321; color: #336644; }
-        .warning { color: #ffcc00; font-size: 10px; margin-top: 10px; line-height: 1.2; }
-    </style>
+    <title>AI Core Burner - PWA</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="ui">
-        <div class="stat">DATA: <span id="data">0</span> TB</div>
-        <div class="stat">CŒURS UTILISÉS: <span id="cores">0</span></div>
-        <div class="stat" style="margin-top:10px;">PUISSANCE :</div>
-        <div id="gflops">0.0000</div>
-        <div class="stat">GFLOPS ESTIMÉS</div>
-        <hr style="border:0; border-top:1px solid #00ff41;">
-        <button class="btn" id="buy-pop">POPULATION +500 (10 TB)</button>
-        <button class="btn" id="buy-complex">COMPLEXITÉ +1 (50 TB)</button>
-        <div class="warning">ATTENTION : L'usage intensif peut provoquer une chauffe importante et un bridage thermique.</div>
+        <div class="header">
+            <span class="title">AI EVOLUTION ENGINE</span>
+            <span id="gen-label">GEN: <span id="gen">1</span></span>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <label>DATA COLLECTÉE</label>
+                <div class="value"><span id="data">0</span> <small>TB</small></div>
+            </div>
+            <div class="stat-box">
+                <label>PUISSANCE (GFLOPS)</label>
+                <div class="value" id="gflops">0.0000</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="buy-pop">
+                <span>+500 UNITÉS</span>
+                <small>COÛT: 10 TB</small>
+            </button>
+            <button class="btn" id="buy-complex">
+                <span>+ COMPLEXITÉ</span>
+                <small>COÛT: 50 TB</small>
+            </button>
+            <div class="slider-group">
+                <label>MUTATION: <span id="mut-val">5</span>%</label>
+                <input type="range" id="mut-slider" min="1" max="50" value="5">
+            </div>
+        </div>
+
+        <div class="footer">
+            COEURS ACTIFS: <span id="cores">0</span>
+        </div>
     </div>
+
     <canvas id="sim"></canvas>
 
-<script>
-const canvas = document.getElementById('sim');
-const ctx = canvas.getContext('2d');
-const numCores = navigator.hardwareConcurrency || 4;
-
-// --- ETAT DU JEU ---
-let gameState = JSON.parse(localStorage.getItem('idle_ai_save')) || {
-    data: 0,
-    popSize: 1000,
-    complexity: 1,
-    mutationRate: 0.05,
-    generation: 1
-};
-
-let lifespan = 180;
-let count = 0;
-let target = { x: 0, y: 100 };
-let population = [];
-let workers = [];
-let totalOpsThisSecond = 0;
-let lastTime = performance.now();
-
-// --- LOGIQUE DES WORKERS ---
-const workerCode = `
-    self.onmessage = function(e) {
-        const { subPop, count, target, complexity } = e.data;
-        let ops = 0;
-        const updatedPop = subPop.map(dot => {
-            if (dot.dead || dot.reached) return dot;
-            for(let i = 0; i < complexity; i++) {
-                dot.vel.x += Math.sin(dot.dna[count].x) * 0.15;
-                dot.vel.y += Math.cos(dot.dna[count].y) * 0.15;
-                ops += 12;
-            }
-            dot.pos.x += dot.vel.x; dot.pos.y += dot.vel.y;
-            let dx = dot.pos.x - target.x, dy = dot.pos.y - target.y;
-            let dist = Math.sqrt(dx*dx + dy*dy);
-            ops += 10;
-            if (dist < 15) dot.reached = true;
-            if (dot.pos.x < 0 || dot.pos.x > 3000 || dot.pos.y < 0 || dot.pos.y > 3000) dot.dead = true;
-            dot.fitness = 1 / (dist + 1); // Calcul de performance
-            if (dot.reached) dot.fitness *= 20;
-            return dot;
-        });
-        self.postMessage({ updatedPop, ops });
-    };
-`;
-
-const blob = new Blob([workerCode], { type: 'application/javascript' });
-const workerUrl = URL.createObjectURL(blob);
-for(let i=0; i<numCores; i++) workers.push(new Worker(workerUrl));
-
-function init() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    target.x = canvas.width / 2;
-    population = Array.from({length: gameState.popSize}, () => ({
-        pos: { x: canvas.width/2, y: canvas.height-50 },
-        vel: { x: 0, y: 0 },
-        dna: Array.from({length: lifespan}, () => ({ x: Math.random()*2-1, y: Math.random()*2-1 })),
-        dead: false, reached: false, fitness: 0
-    }));
-    document.getElementById('cores').innerText = numCores;
-}
-
-// --- MÉCANIQUE D'ÉVOLUTION ---
-function evolve() {
-    // 1. Trier par fitness
-    population.sort((a, b) => b.fitness - a.fitness);
-    
-    // 2. Sélectionner l'élite (les 10% meilleurs)
-    const eliteCount = Math.max(2, Math.floor(gameState.popSize * 0.1));
-    const elite = population.slice(0, eliteCount);
-    
-    // 3. Créer la nouvelle génération
-    population = population.map(() => {
-        // Choisir deux parents parmi l'élite
-        const p1 = elite[Math.floor(Math.random() * elite.length)];
-        const p2 = elite[Math.floor(Math.random() * elite.length)];
-        
-        const childDNA = p1.dna.map((gene, idx) => {
-            // Crossover (mélange des parents)
-            let baseGene = Math.random() > 0.5 ? gene : p2.dna[idx];
-            // Mutation (hasard total)
-            if (Math.random() < gameState.mutationRate) {
-                return { x: Math.random()*2-1, y: Math.random()*2-1 };
-            }
-            return baseGene;
-        });
-
-        return {
-            pos: { x: canvas.width/2, y: canvas.height-50 },
-            vel: { x: 0, y: 0 },
-            dna: childDNA,
-            dead: false, reached: false, fitness: 0
-        };
-    });
-
-    gameState.generation++;
-    save();
-}
-
-function save() {
-    localStorage.setItem('idle_ai_save', JSON.stringify(gameState));
-}
-
-async function updateFrame() {
-    const segmentSize = Math.ceil(gameState.popSize / numCores);
-    const promises = workers.map((worker, i) => {
-        return new Promise(resolve => {
-            worker.onmessage = (e) => resolve(e.data);
-            worker.postMessage({
-                subPop: population.slice(i * segmentSize, (i + 1) * segmentSize),
-                count, target, complexity: gameState.complexity
-            });
-        });
-    });
-
-    const results = await Promise.all(promises);
-    let newPop = [];
-    results.forEach(res => {
-        newPop = newPop.concat(res.updatedPop);
-        totalOpsThisSecond += res.ops;
-    });
-    population = newPop;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    population.forEach(d => {
-        if(!d.dead) {
-            ctx.fillStyle = d.reached ? '#fff' : '#00ff41';
-            ctx.fillRect(d.pos.x, d.pos.y, 2, 2);
-        }
-        if(d.reached) gameState.data += 0.005;
-    });
-
-    ctx.fillStyle = 'red';
-    ctx.beginPath(); ctx.arc(target.x, target.y, 15, 0, Math.PI*2); ctx.fill();
-
-    count++;
-    if (count >= lifespan) {
-        evolve();
-        count = 0;
-    }
-
-    let now = performance.now();
-    if(now - lastTime >= 1000) {
-        document.getElementById('gflops').innerText = (totalOpsThisSecond / 1e9).toFixed(4);
-        document.getElementById('data').innerText = Math.floor(gameState.data);
-        document.getElementById('gen').innerText = gameState.generation;
-        totalOpsThisSecond = 0;
-        lastTime = now;
-    }
-    
-    // UI Updates
-    document.getElementById('buy-pop').disabled = gameState.data < 10;
-    document.getElementById('buy-complex').disabled = gameState.data < 50;
-
-    requestAnimationFrame(updateFrame);
-}
-
-// Actions
-document.getElementById('buy-pop').onclick = () => { gameState.data -= 10; gameState.popSize += 500; init(); };
-document.getElementById('buy-complex').onclick = () => { gameState.data -= 50; gameState.complexity += 5; };
-
-init();
-updateFrame();
-
-
-
-</script>
+    <script src="main.js"></script>
 </body>
 </html>
