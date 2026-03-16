@@ -12,10 +12,9 @@
 </head>
 <body>
 
-    <!-- ── CANVAS FULLSCREEN ── -->
     <canvas id="sim"></canvas>
 
-    <!-- ── TOP BAR : stats toujours visibles ── -->
+    <!-- TOP BAR -->
     <div id="topbar">
         <div class="tb-stat">
             <span class="tb-label">DATA</span>
@@ -31,12 +30,12 @@
         </div>
     </div>
 
-    <!-- ── LEVEL BANNER (apparaît au changement de niveau) ── -->
+    <!-- LEVEL BANNER -->
     <div id="level-banner" class="hidden">
         <span id="level-banner-text">NIVEAU 1</span>
     </div>
 
-    <!-- ── MINI HUD : toujours visible ── -->
+    <!-- MINI HUD -->
     <div id="mini-hud">
         <div class="hud-item">
             <span class="hud-label">BOTS</span>
@@ -56,96 +55,102 @@
         </div>
     </div>
 
-    <!-- ── BOTTOM PANEL ── -->
+    <!-- BOTTOM PANEL -->
     <div id="bottom-panel">
 
-        <!-- Nav tabs -->
-        <div id="panel-nav">
-            <button class="nav-btn active" data-panel="bots">🤖 BOTS</button>
-            <button class="nav-btn" data-panel="skills">🧬 SKILLS</button>
-            <button class="nav-btn" data-panel="market">📈 MARCHÉ</button>
-            <button class="nav-btn" data-panel="stats">📊 STATS</button>
-        </div>
-
-        <!-- Toggle handle -->
-        <button id="panel-toggle" aria-label="Toggle panel">
-            <span id="toggle-arrow">▼</span>
+        <!-- Handle TOUJOURS en premier dans le DOM = toujours visible quand collapsed -->
+        <button id="panel-toggle">
+            <div class="toggle-pip"></div>
+            <span id="toggle-arrow">▲</span>
+            <span id="toggle-label">MENU</span>
         </button>
 
-        <!-- Panel content -->
-        <div id="panel-content">
+        <!-- Tout le reste est caché quand collapsed -->
+        <div id="panel-inner">
 
-            <!-- ── BOTS ── -->
-            <div class="panel active" id="panel-bots">
-                <div class="row-2">
-                    <button class="btn" id="buy-pop"><span>+1 BOT</span><small id="pop-cost">COÛT: 1</small></button>
-                    <button class="btn" id="buy-complex"><span>+INTEL</span><small id="intel-cost">COÛT: 20</small></button>
-                </div>
-                <div class="slider-group">
-                    <label>MUTATION: <span id="mut-val">5</span>%</label>
-                    <input type="range" id="mut-slider" min="1" max="50" value="5">
-                </div>
-                <div class="row-2 mt8">
-                    <button class="btn btn-prestige-buy" id="btn-prestige">
-                        <span>⬆ PRESTIGE</span><small id="prestige-cost">COÛT: 500</small>
-                    </button>
-                    <button class="btn btn-danger" id="reset-game">
-                        <span>🗑 RESET</span><small>TOUT EFFACER</small>
-                    </button>
-                </div>
+            <!-- Tabs -->
+            <div id="panel-nav">
+                <button class="nav-btn active" data-panel="bots">🤖 BOTS</button>
+                <button class="nav-btn" data-panel="skills">🧬 SKILLS</button>
+                <button class="nav-btn" data-panel="market">📈 MARCHÉ</button>
+                <button class="nav-btn" data-panel="stats">📊 STATS</button>
             </div>
 
-            <!-- ── SKILLS ── -->
-            <div class="panel" id="panel-skills">
-                <div class="skill-grid">
-                    <button class="btn btn-skill" id="skill-speed"></button>
-                    <button class="btn btn-skill" id="skill-memory"></button>
-                    <button class="btn btn-skill" id="skill-resistance"></button>
-                    <button class="btn btn-skill" id="skill-sensors"></button>
-                </div>
-            </div>
+            <!-- Panel content -->
+            <div id="panel-content">
 
-            <!-- ── MARKET ── -->
-            <div class="panel" id="panel-market">
-                <div class="market-info">
-                    <span class="market-label">TAUX ACTUEL</span>
-                    <span id="market-rate" class="market-rate-val">1.00x</span>
-                    <span id="market-feedback" class="market-feedback"></span>
+                <!-- BOTS -->
+                <div class="panel active" id="panel-bots">
+                    <div class="row-2">
+                        <button class="btn" id="buy-pop">
+                            <span>+1 BOT</span><small>COÛT: 1</small>
+                        </button>
+                        <button class="btn" id="buy-complex">
+                            <span>+INTEL</span><small>COÛT: 20</small>
+                        </button>
+                    </div>
+                    <div class="slider-group">
+                        <label>MUTATION: <span id="mut-val">5</span>%</label>
+                        <input type="range" id="mut-slider" min="1" max="50" value="5">
+                    </div>
+                    <div class="row-2 mt8">
+                        <button class="btn btn-prestige-buy" id="btn-prestige">
+                            <span>⬆ PRESTIGE</span><small id="prestige-cost">COÛT: 500</small>
+                        </button>
+                        <button class="btn btn-danger" id="reset-game">
+                            <span>🗑 RESET</span><small>TOUT EFFACER</small>
+                        </button>
+                    </div>
                 </div>
-                <div class="row-2">
-                    <button class="btn btn-market" id="btn-sell-gflops">
-                        <span>VENDRE</span><small>GFLOPS→DATA</small>
-                    </button>
-                    <button class="btn btn-market" id="btn-buy-gflops">
-                        <span>ACHETER</span><small>DATA→GFLOPS</small>
-                    </button>
-                </div>
-                <div class="gflops-stock">
-                    GFLOPS STOCKÉS: <span id="gflops-stored">0</span>
-                </div>
-            </div>
 
-            <!-- ── STATS ── -->
-            <div class="panel" id="panel-stats">
-                <div class="stats-row">
-                    <span class="stat-lbl">PRESTIGE</span>
-                    <span id="prestige-count">0</span>
-                    <span class="stat-lbl ml">MULTIPLICATEUR</span>
-                    <span id="prestige-mult2">1.0x</span>
+                <!-- SKILLS -->
+                <div class="panel" id="panel-skills">
+                    <div class="skill-grid">
+                        <button class="btn btn-skill" id="skill-speed"><span></span><small></small></button>
+                        <button class="btn btn-skill" id="skill-memory"><span></span><small></small></button>
+                        <button class="btn btn-skill" id="skill-resistance"><span></span><small></small></button>
+                        <button class="btn btn-skill" id="skill-sensors"><span></span><small></small></button>
+                    </div>
                 </div>
-                <div class="stats-row">
-                    <span class="stat-lbl">CŒURS CPU</span>
-                    <span id="cores">0</span>
-                    <span class="stat-lbl ml">NIVEAU</span>
-                    <span id="level-display2">1</span>
-                </div>
-                <div class="section-lbl">FITNESS / GÉNÉRATION</div>
-                <canvas id="fitness-graph" width="340" height="55"></canvas>
-                <div class="section-lbl">DIVERSITÉ ADN — <span id="dna-diversity">0%</span></div>
-                <div class="dna-bar-wrap"><div class="dna-bar-fill2" id="dna-bar-fill2"></div></div>
-            </div>
 
-        </div><!-- /panel-content -->
+                <!-- MARKET -->
+                <div class="panel" id="panel-market">
+                    <div class="market-info">
+                        <span class="market-label">TAUX ACTUEL</span>
+                        <span id="market-rate" class="market-rate-val">1.00x</span>
+                        <span id="market-feedback" class="market-feedback"></span>
+                    </div>
+                    <div class="row-2">
+                        <button class="btn btn-market" id="btn-sell-gflops">
+                            <span>VENDRE</span><small>GFLOPS→DATA</small>
+                        </button>
+                        <button class="btn btn-market" id="btn-buy-gflops">
+                            <span>ACHETER</span><small>DATA→GFLOPS</small>
+                        </button>
+                    </div>
+                    <div class="gflops-stock">
+                        GFLOPS STOCKÉS: <span id="gflops-stored">0</span>
+                    </div>
+                </div>
+
+                <!-- STATS -->
+                <div class="panel" id="panel-stats">
+                    <div class="stats-row">
+                        <span class="stat-lbl">PRESTIGE</span><span id="prestige-count">0</span>
+                        <span class="stat-lbl ml">MULT</span><span id="prestige-mult2">1.0x</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stat-lbl">WORKERS</span><span id="cores">—</span>
+                        <span class="stat-lbl ml">NIVEAU</span><span id="level-display2">1</span>
+                    </div>
+                    <div class="section-lbl">FITNESS / GÉNÉRATION</div>
+                    <canvas id="fitness-graph" width="340" height="55"></canvas>
+                    <div class="section-lbl">DIVERSITÉ ADN — <span id="dna-diversity">0%</span></div>
+                    <div class="dna-bar-wrap"><div class="dna-bar-fill2" id="dna-bar-fill2"></div></div>
+                </div>
+
+            </div><!-- /panel-content -->
+        </div><!-- /panel-inner -->
     </div><!-- /bottom-panel -->
 
     <script src="formatter.js"></script>

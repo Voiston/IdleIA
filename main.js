@@ -478,4 +478,192 @@ function updateUI(){
     document.getElementById('cores').innerText         =`${numW}w·${aq.fps|0}fps`;
     document.getElementById('market-rate').innerText   =gs.marketRate.toFixed(2)+'x';
     document.getElementById('gflops-stored').innerText =(gs.gflopsAccum||0).toFixed(2);
-   
+    document.getElementById('level-display').innerText =gs.level;
+    document.getElementById('level-display2').innerText=gs.level;
+    const div=(diversity()*100).toFixed(0)+'%';
+    document.getElementById('dna-bar-fill').style.width=div;
+    document.getElementById('dna-bar-fill2').style.width=div;
+    document.getElementById('dna-diversity').innerText=div;
+
+    const pc=getPopCost(), ic=getIntCost();
+    const bp=document.getElementById('buy-pop');
+    bp.querySelector('span').innerText='+1 BOT'; bp.querySelector('small').innerText=`COÛT: ${pc}`; bp.disabled=gs.data<pc;
+    const bi=document.getElementById('buy-complex');
+    bi.querySelector('span').innerText='+INTEL'; bi.querySelector('small').innerText=`COÛT: ${ic}`; bi.disabled=gs.data<ic;
+    document.getElementById('prestige-cost').innerText=`COÛT: ${prestigeCst()}`;
+    document.getElementById('btn-prestige').disabled=gs.data<prestigeCst();
+
+    for(const id of Object.keys(SKILLS)){
+        const sk=SKILLS[id],lvl=gs.skillLevels[id]||0,cost=skillCost(id);
+        const btn=document.getElementById('skill-'+id); if(!btn) continue;
+        if(lvl>=sk.maxLevel){ btn.querySelector('span').innerText=`${sk.label} ✓`; btn.querySelector('small').innerText=sk.desc; btn.disabled=true; }
+        else{ btn.querySelector('span').innerText=`${sk.label} [${lvl}/${sk.maxLevel}]`; btn.querySelector('small').innerText=`COÛT: ${cost}`; btn.disabled=gs.data<cost; }
+    }
+    drawGraph(); totalOps=0;
+}
+
+function fluctMkt(dt){
+    mktTimer+=dt;
+    if(mktTimer>=8000){ gs.marketRate=parseFloat((.4+Math.random()*2.2).toFixed(2)); mktTimer=0; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETUP
+// ─────────────────────────────────────────────────────────────────────────────
+function setup(){
+    canvas.width=window.innerWidth;
+    canvas.height=window.innerHeight;
+    target.baseX=canvas.width/2; target.x=target.baseX; target.y=90;
+    initTrailCanvas();
+    workers=Array.from({length:numW},()=>new Worker(W_URL));
+    population=Array.from({length:gs.popSize},()=>createDot());
+    applyLevel(gs.level);
+    updateUI();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+async function loop(){
+    const now=performance.now(), dt=now-lastUI;
+    updateAQ(now);
+
+    target.angle+=getLvl(gs.level).speed;
+    target.x=target.baseX+Math.sin(target.angle)*(canvas.width*.28);
+
+    const results=await Promise.all(dispatch(fc));
+    for(const r of results) totalOps+=r.ops;
+
+    // Update trails on main thread (no serialization cost)
+    for(const d of population){
+        if(!d.dead){ d.trail.push({x:d.x,y:d.y}); if(d.trail.length>20) d.trail.shift(); }
+    }
+
+    // ── DRAW ──────────────────────────────────────────────────────────────
+    ctx.fillStyle='rgba(5,10,5,.35)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // Elite threshold
+    const sorted=[...population].sort((a,b)=>b.fit-a.fit);
+    const eliteThr=sorted[Math.floor(sorted.length*.2)]?.fit||0;
+
+    drawTrails(eliteThr);
+
+    // Dots
+    for(const d of population){
+        if(d.dead) continue;
+        if(d.reached&&!d.rewarded){
+            gs.data+=gs.prestigeMultiplier; reachedGen++; d.rewarded=true;
+            if(aq.particles) spawnParticles(d.x,d.y);
+        }
+        const elite=!d.reached&&d.fit>=eliteThr;
+        if(elite){
+            if(aq.shadow){ ctx.shadowBlur=7; ctx.shadowColor='cyan'; }
+            ctx.fillStyle='white'; ctx.fillRect(d.x-1,d.y-1,5,5);
+            if(aq.shadow) ctx.shadowBlur=0;
+        } else {
+            ctx.fillStyle=d.reached?'#fff':COLOR_LUT[Math.min(255,d.fit*255|0)];
+            ctx.fillRect(d.x,d.y,3,3);
+        }
+    }
+
+    tickParticles();
+    if(aq.particles) drawParticles();
+
+    if(obstacles.length){
+        ctx.shadowBlur=4; ctx.shadowColor='rgba(255,80,0,.4)';
+        ctx.fillStyle='#1a0800'; ctx.strokeStyle='#ff6600'; ctx.lineWidth=1;
+        for(const ob of obstacles){ ctx.fillRect(ob.x,ob.y,ob.w,ob.h); ctx.strokeRect(ob.x,ob.y,ob.w,ob.h); }
+        ctx.shadowBlur=0;
+    }
+
+    const prog=Math.min(gs.gensOnLevel/gensReq(gs.level),1);
+    ctx.fillStyle='rgba(0,255,65,.05)'; ctx.fillRect(0,canvas.height-3,canvas.width,3);
+    ctx.fillStyle='rgba(0,255,65,.4)';  ctx.fillRect(0,canvas.height-3,canvas.width*prog,3);
+
+    ctx.shadowBlur=18; ctx.shadowColor='cyan';
+    ctx.fillStyle='cyan';
+    ctx.beginPath(); ctx.arc(target.x,target.y,12,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+
+    fc++;
+    if(fc>=LIFESPAN){ evolve(); fc=0; }
+
+    if(dt>=1000){
+        fluctMkt(dt); gs.gflopsAccum=(gs.gflopsAccum||0)+totalOps/1e9;
+        updateUI(); lastUI=now;
+    }
+
+    requestAnimationFrame(loop);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PANEL / TABS
+// ─────────────────────────────────────────────────────────────────────────────
+const bPanel=document.getElementById('bottom-panel');
+document.getElementById('panel-toggle').addEventListener('click',()=>bPanel.classList.toggle('expanded'));
+document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.panel).classList.add('active');
+    if(!bPanel.classList.contains('expanded')) bPanel.classList.add('expanded');
+}));
+
+// Skills
+for(const id of Object.keys(SKILLS)){
+    const btn=document.getElementById('skill-'+id); if(!btn) continue;
+    btn.innerHTML='<span></span><small></small>';
+    btn.addEventListener('click',()=>{
+        const lvl=gs.skillLevels[id]||0, cost=skillCost(id);
+        if(lvl<SKILLS[id].maxLevel&&gs.data>=cost){ gs.data-=cost; gs.skillLevels[id]=lvl+1; save(); updateUI(); }
+    });
+}
+
+// Buttons
+document.getElementById('buy-pop').addEventListener('click',()=>{
+    const c=getPopCost(); if(gs.data<c) return;
+    gs.data-=c; gs.popSize++; gs.purchasedPop++;
+    population.push(createDot()); save();
+});
+document.getElementById('buy-complex').addEventListener('click',()=>{
+    const c=getIntCost(); if(gs.data<c) return;
+    gs.data-=c; gs.complexity++; gs.purchasedIntel++; save();
+});
+document.getElementById('mut-slider').addEventListener('input',function(){
+    gs.mutationRate=this.value/100; document.getElementById('mut-val').innerText=this.value;
+});
+
+function feedback(msg){ const el=document.getElementById('market-feedback'); el.innerText=msg; setTimeout(()=>el.innerText='',2200); }
+document.getElementById('btn-sell-gflops').addEventListener('click',()=>{
+    const g=Math.floor(gs.gflopsAccum||0); if(g<1){feedback('PAS ASSEZ');return;}
+    const gain=Math.floor(g*gs.marketRate*10); gs.data+=gain; gs.gflopsAccum=0; save(); updateUI(); feedback(`+${gain} DATA`);
+});
+document.getElementById('btn-buy-gflops').addEventListener('click',()=>{
+    const cost=Math.floor(20/gs.marketRate); if(gs.data<cost){feedback(`BESOIN: ${cost}`);return;}
+    gs.data-=cost; gs.gflopsAccum=(gs.gflopsAccum||0)+5; save(); updateUI(); feedback('+5 GFLOPS');
+});
+document.getElementById('btn-prestige').addEventListener('click',()=>{
+    const cost=prestigeCst(); if(gs.data<cost) return;
+    if(!confirm(`PRESTIGE: dépenser ${cost} DATA pour +0.5x multiplicateur et réinitialiser ?`)) return;
+    gs={...GS_DEF,skillLevels:{...gs.skillLevels},level:gs.level,prestige:gs.prestige+1,prestigeMultiplier:gs.prestigeMultiplier+.5};
+    population=Array.from({length:gs.popSize},()=>createDot());
+    reachedGen=0; fitnessHist=[]; fc=0; applyLevel(gs.level); save(); updateUI();
+});
+document.getElementById('reset-game').addEventListener('click',()=>{
+    if(confirm('ATTENTION : Supprimer toute la progression ?')){
+        localStorage.removeItem('burner_v5'); localStorage.removeItem('burner_wcount');
+        document.body.style.backgroundColor='white'; setTimeout(()=>window.location.reload(),100);
+    }
+});
+
+function save(){ localStorage.setItem('burner_v5',JSON.stringify(gs)); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────────────────────────
+(async()=>{
+    numW = await autoWorkers();
+    setup();
+    loop();
+})();
