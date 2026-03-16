@@ -89,16 +89,17 @@ function setup() {
 
 function createDot(dna = null) {
     return {
-        pos: { x: canvas.width/2, y: canvas.height-50 },
+        pos: { x: canvas.width / 2, y: canvas.height - 100 }, // Départ un peu plus haut pour voir la dispersion
         vel: { x: 0, y: 0 },
-        // On s'assure que l'ADN couvre tout le lifespan actuel
+        // On génère des angles de 0 à 6.28 (2*PI) pour un aléatoire parfait sur 360°
         dna: dna || Array.from({length: 500}, () => ({ 
-            x: (Math.random() - 0.5) * 4, 
-            y: (Math.random() - 0.5) * 4 
+            angle: Math.random() * Math.PI * 2, 
+            force: Math.random() * 0.8 // Puissance de poussée aléatoire
         })),
         dead: false, reached: false, fitness: 0
     };
 }
+
 
 function evolve() {
     population.sort((a, b) => b.fitness - a.fitness);
