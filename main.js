@@ -250,7 +250,7 @@ function drawParticles(){
 const FPS_W=30;
 const fpsArr=new Float32Array(FPS_W);
 let fpsIdx=0, fpsFull=false, lastFT=performance.now();
-const aq={trailLen:16, shadow:true, particles:true, fps:60};
+const aq={shadow:true, particles:true, fps:60};
 
 function updateAQ(now){
     const dt=now-lastFT; lastFT=now;
@@ -262,25 +262,12 @@ function updateAQ(now){
     for(let i=0;i<n;i++) sum+=fpsArr[i];
     aq.fps=sum/n;
     if(aq.fps<45){
-        aq.trailLen=Math.max(5,aq.trailLen-2);
         aq.shadow=false;
         aq.particles=aq.fps>35;
     } else if(aq.fps>56){
-        aq.trailLen=Math.min(18,aq.trailLen+1);
         aq.shadow=true;
         aq.particles=true;
     }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// OFFSCREEN TRAIL CANVAS
-// ─────────────────────────────────────────────────────────────────────────────
-let tCanvas=null, tCtx=null;
-function initTrailCanvas(){
-    tCanvas=document.createElement('canvas');
-    tCanvas.width=canvas.width; tCanvas.height=canvas.height;
-    tCtx=tCanvas.getContext('2d');
-    tCtx.fillStyle='rgb(5,10,5)'; tCtx.fillRect(0,0,canvas.width,canvas.height);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,6 +279,7 @@ const target={x:0,y:0,baseX:0,angle:0};
 let   workers=[], numW=2;
 let   totalOps=0, lastUI=performance.now();
 let   obstacles=[], population=[], reachedGen=0, fitnessHist=[];
+let   totalReachedOnLevel=0;  // bots cumulés ayant touché la cible sur ce niveau
 let   mktTimer=0;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -303,7 +291,9 @@ const skillCost   = id=>{ const s=SKILLS[id]; return Math.floor(s.baseCost*Math.
 const skillMult   = (id,p)=>1+(gs.skillLevels[id]||0)*p;
 const getDnaLen   = ()=>1000*Math.pow(2,gs.skillLevels.memory||0);
 const prestigeCst = ()=>Math.floor(500*Math.pow(3,gs.prestige));
-const gensReq     = l=>3+l*2;
+// Nombre de bots cumulés ayant touché la cible requis pour passer au niveau suivant
+// Niv 1→2 : 1000, Niv 2→3 : 2000, etc.
+const reachReq    = l => l * 1000;
 
 function createDot(dna=null){
     const dnaLen=getDnaLen();
@@ -312,7 +302,6 @@ function createDot(dna=null){
         vx:0, vy:0, fit:0,
         dead:false, reached:false, rewarded:false,
         dna: dna||Array.from({length:dnaLen},()=>({a:Math.random()*Math.PI*2, f:Math.random()*.7})),
-        trail: [],
     };
 }
 
@@ -326,8 +315,8 @@ function applyLevel(l){
 }
 function tryLevelUp(){
     gs.gensOnLevel++;
-    if(gs.gensOnLevel>=gensReq(gs.level)){
-        gs.level++; gs.gensOnLevel=0;
+    if(totalReachedOnLevel >= reachReq(gs.level)){
+        gs.level++; gs.gensOnLevel=0; totalReachedOnLevel=0;
         applyLevel(gs.level);
         showLvlBanner(gs.level);
         gs.data+=gs.level*5*gs.prestigeMultiplier;
@@ -399,36 +388,6 @@ function dispatch(frame){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DRAW TRAILS  (offscreen canvas with per-bot circular trail)
-// ─────────────────────────────────────────────────────────────────────────────
-function drawTrails(eliteThr){
-    // Gentle fade of the trail canvas
-    tCtx.globalAlpha=.22;
-    tCtx.fillStyle='rgb(5,10,5)';
-    tCtx.fillRect(0,0,canvas.width,canvas.height);
-    tCtx.globalAlpha=1;
-    tCtx.lineWidth=1;
-
-    const maxT=aq.trailLen;
-    for(const d of population){
-        if(d.dead) continue;
-        const t=d.trail;
-        const n=Math.min(t.length,maxT);
-        if(n<2) continue;
-        const col=d.reached?'#fff':d.fit>=eliteThr?'#00ffff':COLOR_LUT[Math.min(255,d.fit*255|0)];
-        tCtx.strokeStyle=col;
-        tCtx.beginPath();
-        const start=t.length-n;
-        tCtx.moveTo(t[start].x,t[start].y);
-        for(let j=start+1;j<t.length;j++) tCtx.lineTo(t[j].x,t[j].y);
-        tCtx.globalAlpha=(n/maxT)*.32;
-        tCtx.stroke();
-    }
-    tCtx.globalAlpha=1;
-    ctx.drawImage(tCanvas,0,0);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // DNA DIVERSITY
 // ─────────────────────────────────────────────────────────────────────────────
 function diversity(){
@@ -478,7 +437,8 @@ function updateUI(){
     document.getElementById('cores').innerText         =`${numW}w·${aq.fps|0}fps`;
     document.getElementById('market-rate').innerText   =gs.marketRate.toFixed(2)+'x';
     document.getElementById('gflops-stored').innerText =(gs.gflopsAccum||0).toFixed(2);
-    document.getElementById('level-display').innerText =gs.level;
+    const req=reachReq(gs.level);
+    document.getElementById('level-display').innerText =`${gs.level} · ${totalReachedOnLevel}/${req}`;
     document.getElementById('level-display2').innerText=gs.level;
     const div=(diversity()*100).toFixed(0)+'%';
     document.getElementById('dna-bar-fill').style.width=div;
@@ -514,7 +474,6 @@ function setup(){
     canvas.width=window.innerWidth;
     canvas.height=window.innerHeight;
     target.baseX=canvas.width/2; target.x=target.baseX; target.y=90;
-    initTrailCanvas();
     workers=Array.from({length:numW},()=>new Worker(W_URL));
     population=Array.from({length:gs.popSize},()=>createDot());
     applyLevel(gs.level);
@@ -534,11 +493,6 @@ async function loop(){
     const results=await Promise.all(dispatch(fc));
     for(const r of results) totalOps+=r.ops;
 
-    // Update trails on main thread (no serialization cost)
-    for(const d of population){
-        if(!d.dead){ d.trail.push({x:d.x,y:d.y}); if(d.trail.length>20) d.trail.shift(); }
-    }
-
     // ── DRAW ──────────────────────────────────────────────────────────────
     ctx.fillStyle='rgba(5,10,5,.35)';
     ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -547,13 +501,11 @@ async function loop(){
     const sorted=[...population].sort((a,b)=>b.fit-a.fit);
     const eliteThr=sorted[Math.floor(sorted.length*.2)]?.fit||0;
 
-    drawTrails(eliteThr);
-
     // Dots
     for(const d of population){
         if(d.dead) continue;
         if(d.reached&&!d.rewarded){
-            gs.data+=gs.prestigeMultiplier; reachedGen++; d.rewarded=true;
+            gs.data+=gs.prestigeMultiplier; reachedGen++; totalReachedOnLevel++; d.rewarded=true;
             if(aq.particles) spawnParticles(d.x,d.y);
         }
         const elite=!d.reached&&d.fit>=eliteThr;
@@ -577,7 +529,7 @@ async function loop(){
         ctx.shadowBlur=0;
     }
 
-    const prog=Math.min(gs.gensOnLevel/gensReq(gs.level),1);
+    const prog=Math.min(totalReachedOnLevel/reachReq(gs.level),1);
     ctx.fillStyle='rgba(0,255,65,.05)'; ctx.fillRect(0,canvas.height-3,canvas.width,3);
     ctx.fillStyle='rgba(0,255,65,.4)';  ctx.fillRect(0,canvas.height-3,canvas.width*prog,3);
 
@@ -648,7 +600,7 @@ document.getElementById('btn-prestige').addEventListener('click',()=>{
     if(!confirm(`PRESTIGE: dépenser ${cost} DATA pour +0.5x multiplicateur et réinitialiser ?`)) return;
     gs={...GS_DEF,skillLevels:{...gs.skillLevels},level:gs.level,prestige:gs.prestige+1,prestigeMultiplier:gs.prestigeMultiplier+.5};
     population=Array.from({length:gs.popSize},()=>createDot());
-    reachedGen=0; fitnessHist=[]; fc=0; applyLevel(gs.level); save(); updateUI();
+    reachedGen=0; fitnessHist=[]; fc=0; totalReachedOnLevel=0; applyLevel(gs.level); save(); updateUI();
 });
 document.getElementById('reset-game').addEventListener('click',()=>{
     if(confirm('ATTENTION : Supprimer toute la progression ?')){
