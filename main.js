@@ -1,85 +1,85 @@
 /**
- * AI CORE BURNER - Moteur Principal (main.js)
- * Mode : Idle Progressif (Début à 5 bots)
+ * AI CORE - EVOLUTION (main.js)
+ * Focus : Intelligence Artificielle & Fluidité
  */
 
 const canvas = document.getElementById('sim');
 const ctx = canvas.getContext('2d');
 const numCores = navigator.hardwareConcurrency || 4;
 
-// --- ÉTAT DU JEU ---
 let gameState = JSON.parse(localStorage.getItem('burner_save')) || {
     data: 0,
-    popSize: 5, // Commence avec seulement 5 bots
-    complexity: 1,
+    popSize: 5,
+    complexity: 1, // Devient ici le niveau d'IA
     mutationRate: 0.1,
     generation: 1
 };
 
-let lifespan = 150; 
+let lifespan = 150;
 let count = 0;
 let target = { x: 0, y: 80 };
 let population = [];
 let workers = [];
-let totalOps = 0;
 let lastTime = performance.now();
 let workerUrl = null;
 
-// --- WORKER BLOB ---
 const workerBlob = new Blob([`
     self.onmessage = function(e) {
-        const { subPop, count, target, complexity } = e.data;
-        let ops = 0;
+        const { subPop, count, target, complexity, lifespan } = e.data;
         const updated = subPop.map(dot => {
             if (dot.dead || dot.reached) return dot;
             
-            for(let i=0; i<complexity; i++) {
-                const gene = dot.dna[count] || {angle: 0, force: 0};
-                dot.vel.x += Math.cos(gene.angle) * gene.force;
-                dot.vel.y += Math.sin(gene.angle) * gene.force;
-                ops += 20; 
-            }
+            const gene = dot.dna[count] || {angle: 0, force: 0};
             
-            dot.vel.x *= 0.96; 
-            dot.vel.y *= 0.96;
+            // --- MÉCANIQUE D'INTELLIGENCE (La Complexité) ---
+            // Plus complexity est haute, plus le bot "corrige" sa trajectoire vers la cible
+            let targetAngle = Math.atan2(target.y - dot.pos.y, target.x - dot.pos.x);
+            let aiInfluence = Math.min(0.5, complexity / 100); // Max 50% d'aide
+            
+            let finalAngle = gene.angle * (1 - aiInfluence) + targetAngle * aiInfluence;
+            
+            dot.vel.x += Math.cos(finalAngle) * gene.force;
+            dot.vel.y += Math.sin(finalAngle) * gene.force;
+            
+            // Physique plus fluide (Inertie)
+            dot.vel.x *= 0.97;
+            dot.vel.y *= 0.97;
             dot.pos.x += dot.vel.x; 
             dot.pos.y += dot.vel.y;
             
-            let dx = dot.pos.x - target.x;
-            let dy = dot.pos.y - target.y;
-            let d = Math.sqrt(dx*dx + dy*dy);
-            ops += 10;
-
-            if (d < 25) dot.reached = true;
-            if (dot.pos.x < -50 || dot.pos.x > 3000 || dot.pos.y < -50 || dot.pos.y > 3000) dot.dead = true;
+            let d = Math.sqrt((dot.pos.x-target.x)**2 + (dot.pos.y-target.y)**2);
             
-            // FITNESS : Plus la distance (d) est petite, plus la fitness est grande
+            if (d < 25) {
+                dot.reached = true;
+                dot.finishTime = count; // On enregistre quand il a fini
+            }
+            
+            if (dot.pos.x < -20 || dot.pos.x > 3000 || dot.pos.y < -20 || dot.pos.y > 3000) dot.dead = true;
+            
+            // Fitness améliorée : Proximité + Bonus de vitesse
             dot.fitness = 1 / (d + 1);
-            if (dot.reached) dot.fitness *= 100; 
+            if (dot.reached) {
+                dot.fitness = 1 + (lifespan - dot.finishTime) / lifespan; 
+            }
             
             return dot;
         });
-        self.postMessage({ updated, ops });
+        self.postMessage({ updated });
     };
 `], { type: 'application/javascript' });
+
+// --- RESTE DES FONCTIONS (SETUP, CREATE, SAVE) ---
 
 function setup() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     target.x = canvas.width / 2;
-    document.getElementById('cores').innerText = numCores;
-    
     if (workerUrl) URL.revokeObjectURL(workerUrl);
     workerUrl = URL.createObjectURL(workerBlob);
-
     workers.forEach(w => w.terminate());
     workers = [];
     for(let i=0; i<numCores; i++) workers.push(new Worker(workerUrl));
-    
-    // Initialisation population si vide
-    if (population.length === 0) {
-        population = Array.from({length: gameState.popSize}, () => createDot());
-    }
+    if (population.length === 0) population = Array.from({length: gameState.popSize}, () => createDot());
 }
 
 function createDot(dna = null) {
@@ -87,29 +87,21 @@ function createDot(dna = null) {
         pos: { x: canvas.width / 2, y: canvas.height - 100 },
         vel: { x: 0, y: 0 },
         dna: dna || Array.from({length: 500}, () => ({ 
-            angle: Math.random() * Math.PI * 2, 
+            angle: (Math.random() * Math.PI * 2), 
             force: Math.random() * 0.8
         })),
-        dead: false, reached: false, fitness: 0
+        dead: false, reached: false, fitness: 0, finishTime: 0
     };
 }
 
-// --- GÉNÉTIQUE : Sélection par proximité ---
 function evolve() {
-    // On trie toute la population par fitness (la proximité est incluse dedans)
     population.sort((a, b) => b.fitness - a.fitness);
-    
     let newPop = [];
-    // On garde les 2 meilleurs comme parents absolus si la pop est petite
-    const eliteSize = Math.max(1, Math.floor(gameState.popSize * 0.2));
-    const elite = population.slice(0, eliteSize);
+    const elite = population.slice(0, Math.max(1, gameState.popSize * 0.2));
 
     for(let i = 0; i < gameState.popSize; i++) {
-        // Sélection par tournoi parmi les survivants
         let parent = elite[Math.floor(Math.random() * elite.length)];
-
         const newDna = parent.dna.map(g => {
-            // Mutation : 10% de chance de changer totalement de direction
             if (Math.random() < gameState.mutationRate) {
                 return { angle: Math.random() * Math.PI * 2, force: Math.random() * 0.8 };
             }
@@ -117,7 +109,6 @@ function evolve() {
         });
         newPop.push(createDot(newDna));
     }
-    
     population = newPop;
     gameState.generation++;
     save();
@@ -133,80 +124,64 @@ async function loop() {
         w.onmessage = e => res(e.data);
         w.postMessage({
             subPop: population.slice(i*segment, (i+1)*segment),
-            count, target, complexity: gameState.complexity
+            count, target, complexity: gameState.complexity, lifespan
         });
     }));
 
     const results = await Promise.all(work);
     population = [];
-    results.forEach(r => {
-        population = population.concat(r.updated);
-        totalOps += r.ops;
-    });
+    results.forEach(r => population = population.concat(r.updated));
 
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; 
+    // Rendu Néon ultra-propre
+    ctx.fillStyle = 'rgba(10, 15, 25, 0.4)'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     for (let d of population) {
         if (!d.dead) {
-            ctx.fillStyle = d.reached ? '#fff' : '#00ff41';
-            ctx.fillRect(d.pos.x, d.pos.y, 2, 2);
+            ctx.fillStyle = d.reached ? '#fff' : `hsl(${130 + (d.fitness * 100)}, 100%, 50%)`;
+            ctx.fillRect(d.pos.x, d.pos.y, 3, 3);
         }
-        if (d.reached) gameState.data += 0.005; // Gain quand un bot touche
+        // Gain de Data basé sur la rapidité
+        if (d.reached) {
+            let speedBonus = (lifespan - d.finishTime) / 100;
+            gameState.data += 0.001 + speedBonus;
+        }
     }
 
-    ctx.fillStyle = 'red';
-    ctx.beginPath(); ctx.arc(target.x, target.y, 15, 0, Math.PI*2); ctx.fill();
+    // Cible Style "Core"
+    ctx.shadowBlur = 20; ctx.shadowColor = "cyan";
+    ctx.fillStyle = 'cyan';
+    ctx.beginPath(); ctx.arc(target.x, target.y, 12, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
 
     count++;
     if (count >= lifespan) { evolve(); count = 0; }
 
-    let now = performance.now();
-    if (now - lastTime >= 1000) {
-        let gflopsValue = totalOps / 1e9;
-        let display = gflopsValue < 0.001 ? (totalOps / 1e3).toFixed(0) + " <small>FLOPS</small>" : 
-                     (gflopsValue < 1 ? (totalOps / 1e6).toFixed(2) + " <small>MFLOPS</small>" : 
-                     gflopsValue.toFixed(4) + " <small>GFLOPS</small>");
-        
-        document.getElementById('gflops').innerHTML = display;
-        document.getElementById('data').innerText = Math.floor(gameState.data);
-        document.getElementById('gen').innerText = gameState.generation;
-        totalOps = 0; lastTime = now;
-    }
-
-    // Mise à jour de l'UI des boutons
+    // Update UI simple
+    document.getElementById('data').innerText = Math.floor(gameState.data);
+    document.getElementById('gen').innerText = gameState.generation;
     document.getElementById('buy-pop').disabled = gameState.data < 1;
-    document.getElementById('buy-complex').disabled = gameState.data < 50;
+    document.getElementById('buy-complex').disabled = gameState.data < 20;
 
     requestAnimationFrame(loop);
 }
 
-// --- BOUTONS ---
+// ... Boutons d'achat ...
 document.getElementById('buy-pop').onclick = () => {
     if (gameState.data >= 1) {
         gameState.data -= 1;
-        gameState.popSize += 1; // +1 bot seulement
+        gameState.popSize++;
         population.push(createDot());
         save();
     }
 };
 
 document.getElementById('buy-complex').onclick = () => {
-    if (gameState.data >= 50) {
-        gameState.data -= 50;
-        gameState.complexity += 5;
+    if (gameState.data >= 20) {
+        gameState.data -= 20;
+        gameState.complexity++;
         save();
     }
-};
-
-document.getElementById('mut-slider').oninput = (e) => {
-    gameState.mutationRate = e.target.value / 100;
-    document.getElementById('mut-val').innerText = e.target.value;
-};
-
-window.onresize = () => {
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-    target.x = canvas.width / 2;
 };
 
 setup();
