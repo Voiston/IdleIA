@@ -162,3 +162,14 @@ input[type=range] {
     display: block;
     filter: blur(0.4px); /* Léger adoucissement des particules */
 }
+
+.btn-danger:hover {
+    background: rgba(255, 65, 65, 0.2) !important;
+    box-shadow: 0 0 15px rgba(255, 65, 65, 0.4) !important;
+}
+
+.btn-danger:active {
+    background: #ff4141 !important;
+    color: #000 !important;
+}
+
