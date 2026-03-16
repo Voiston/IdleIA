@@ -201,6 +201,22 @@ document.getElementById('buy-complex').onclick = () => {
     }
 };
 
+document.getElementById('reset-game').onclick = () => {
+    if (confirm("ATTENTION : Cette action va supprimer toute ta progression (Bots, Intelligence et Data). Es-tu sûr ?")) {
+        // Supprime la clé de sauvegarde
+        localStorage.removeItem('burner_save');
+        
+        // Optionnel : Un petit effet de glitch ou de flash avant de recharger
+        document.body.style.backgroundColor = "white";
+        
+        // Recharge la page pour réinitialiser l'état du jeu
+        setTimeout(() => {
+            window.location.reload();
+        }, 100);
+    }
+};
+
+
 function save() { localStorage.setItem('burner_save', JSON.stringify(gameState)); }
 
 setup();
