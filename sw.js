@@ -3,7 +3,7 @@
  * Gestion du cache et des mises à jour forcées
  */
 
-const CACHE_NAME = 'burner-v0.0.99'; // Incrémenté pour forcer la mise à jour
+const CACHE_NAME = 'burner-v0.0.999'; // Incrémenté pour forcer la mise à jour
 const ASSETS = [
   './',
   'index.html',
