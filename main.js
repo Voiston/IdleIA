@@ -10,13 +10,13 @@ const numCores = navigator.hardwareConcurrency || 4;
 // --- ÉTAT DU JEU (Sauvegarde locale) ---
 let gameState = JSON.parse(localStorage.getItem('burner_save')) || {
     data: 0,
-    popSize: 1000,
+    popSize: 100,
     complexity: 1,
     mutationRate: 0.08, // Augmenté pour plus de dispersion
     generation: 1
 };
 
-let lifespan = 200; // Plus de temps pour atteindre la cible
+let lifespan = 90; // Plus de temps pour atteindre la cible
 let count = 0;
 let target = { x: 0, y: 80 };
 let population = [];
