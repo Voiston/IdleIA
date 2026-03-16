@@ -1,17 +1,18 @@
 /**
  * AI CORE - EVOLUTION (main.js)
- * Focus : Intelligence Artificielle & Fluidité
+ * Focus : Intelligence Artificielle, Fluidité & Notation Dynamique
  */
 
 const canvas = document.getElementById('sim');
 const ctx = canvas.getContext('2d');
 const numCores = navigator.hardwareConcurrency || 4;
 
+// --- ÉTAT DU JEU ---
 let gameState = JSON.parse(localStorage.getItem('burner_save')) || {
     data: 0,
     popSize: 5,
-    complexity: 1, // Devient ici le niveau d'IA
-    mutationRate: 0.1,
+    complexity: 1,
+    mutationRate: 0.05,
     generation: 1
 };
 
@@ -20,43 +21,44 @@ let count = 0;
 let target = { x: 0, y: 80 };
 let population = [];
 let workers = [];
+let totalOps = 0;
 let lastTime = performance.now();
 let workerUrl = null;
 
+// --- WORKER (Cerveau des bots) ---
 const workerBlob = new Blob([`
     self.onmessage = function(e) {
         const { subPop, count, target, complexity, lifespan } = e.data;
+        let ops = 0;
         const updated = subPop.map(dot => {
             if (dot.dead || dot.reached) return dot;
             
             const gene = dot.dna[count] || {angle: 0, force: 0};
-            
-            // --- MÉCANIQUE D'INTELLIGENCE (La Complexité) ---
-            // Plus complexity est haute, plus le bot "corrige" sa trajectoire vers la cible
+            ops += 10; // Accès ADN
+
+            // --- INTELLIGENCE (Correction de trajectoire) ---
             let targetAngle = Math.atan2(target.y - dot.pos.y, target.x - dot.pos.x);
-            let aiInfluence = Math.min(0.5, complexity / 100); // Max 50% d'aide
-            
+            let aiInfluence = Math.min(0.6, complexity / 50); 
             let finalAngle = gene.angle * (1 - aiInfluence) + targetAngle * aiInfluence;
-            
+            ops += 30; // Calculs Trigonométriques
+
             dot.vel.x += Math.cos(finalAngle) * gene.force;
             dot.vel.y += Math.sin(finalAngle) * gene.force;
             
-            // Physique plus fluide (Inertie)
             dot.vel.x *= 0.97;
             dot.vel.y *= 0.97;
             dot.pos.x += dot.vel.x; 
             dot.pos.y += dot.vel.y;
-            
+            ops += 15; // Physique
+
             let d = Math.sqrt((dot.pos.x-target.x)**2 + (dot.pos.y-target.y)**2);
-            
             if (d < 25) {
                 dot.reached = true;
-                dot.finishTime = count; // On enregistre quand il a fini
+                dot.finishTime = count;
             }
             
-            if (dot.pos.x < -20 || dot.pos.x > 3000 || dot.pos.y < -20 || dot.pos.y > 3000) dot.dead = true;
+            if (dot.pos.x < -50 || dot.pos.x > 3500 || dot.pos.y < -50 || dot.pos.y > 3500) dot.dead = true;
             
-            // Fitness améliorée : Proximité + Bonus de vitesse
             dot.fitness = 1 / (d + 1);
             if (dot.reached) {
                 dot.fitness = 1 + (lifespan - dot.finishTime) / lifespan; 
@@ -64,30 +66,34 @@ const workerBlob = new Blob([`
             
             return dot;
         });
-        self.postMessage({ updated });
+        self.postMessage({ updated, ops });
     };
 `], { type: 'application/javascript' });
-
-// --- RESTE DES FONCTIONS (SETUP, CREATE, SAVE) ---
 
 function setup() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     target.x = canvas.width / 2;
+    document.getElementById('cores').innerText = numCores;
+
     if (workerUrl) URL.revokeObjectURL(workerUrl);
     workerUrl = URL.createObjectURL(workerBlob);
+
     workers.forEach(w => w.terminate());
     workers = [];
     for(let i=0; i<numCores; i++) workers.push(new Worker(workerUrl));
-    if (population.length === 0) population = Array.from({length: gameState.popSize}, () => createDot());
+    
+    if (population.length === 0) {
+        population = Array.from({length: gameState.popSize}, () => createDot());
+    }
 }
 
 function createDot(dna = null) {
     return {
         pos: { x: canvas.width / 2, y: canvas.height - 100 },
         vel: { x: 0, y: 0 },
-        dna: dna || Array.from({length: 500}, () => ({ 
-            angle: (Math.random() * Math.PI * 2), 
+        dna: dna || Array.from({length: 1000}, () => ({ 
+            angle: Math.random() * Math.PI * 2, 
             force: Math.random() * 0.8
         })),
         dead: false, reached: false, fitness: 0, finishTime: 0
@@ -97,7 +103,7 @@ function createDot(dna = null) {
 function evolve() {
     population.sort((a, b) => b.fitness - a.fitness);
     let newPop = [];
-    const elite = population.slice(0, Math.max(1, gameState.popSize * 0.2));
+    const elite = population.slice(0, Math.max(1, Math.floor(gameState.popSize * 0.2)));
 
     for(let i = 0; i < gameState.popSize; i++) {
         let parent = elite[Math.floor(Math.random() * elite.length)];
@@ -111,6 +117,11 @@ function evolve() {
     }
     population = newPop;
     gameState.generation++;
+    
+    // Effet visuel : Flash au changement de génération
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillRect(0,0, canvas.width, canvas.height);
+    
     save();
 }
 
@@ -130,26 +141,29 @@ async function loop() {
 
     const results = await Promise.all(work);
     population = [];
-    results.forEach(r => population = population.concat(r.updated));
+    results.forEach(r => {
+        population = population.concat(r.updated);
+        totalOps += r.ops;
+    });
 
-    // Rendu Néon ultra-propre
-    ctx.fillStyle = 'rgba(10, 15, 25, 0.4)'; 
+    // Rendu
+    ctx.fillStyle = 'rgba(5, 8, 10, 0.3)'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
     for (let d of population) {
         if (!d.dead) {
-            ctx.fillStyle = d.reached ? '#fff' : `hsl(${130 + (d.fitness * 100)}, 100%, 50%)`;
+            ctx.fillStyle = d.reached ? '#fff' : `hsl(${140 + (d.fitness * 80)}, 100%, 50%)`;
             ctx.fillRect(d.pos.x, d.pos.y, 3, 3);
         }
-        // Gain de Data basé sur la rapidité
         if (d.reached) {
-            let speedBonus = (lifespan - d.finishTime) / 100;
-            gameState.data += 0.001 + speedBonus;
+            // Gain basé sur l'intelligence (complexity) et la vitesse
+            let bonus = (lifespan - d.finishTime) / 100;
+            gameState.data += (0.002 * gameState.complexity) + bonus;
         }
     }
 
-    // Cible Style "Core"
-    ctx.shadowBlur = 20; ctx.shadowColor = "cyan";
+    // Cible
+    ctx.shadowBlur = 15; ctx.shadowColor = "cyan";
     ctx.fillStyle = 'cyan';
     ctx.beginPath(); ctx.arc(target.x, target.y, 12, 0, Math.PI*2); ctx.fill();
     ctx.shadowBlur = 0;
@@ -157,16 +171,24 @@ async function loop() {
     count++;
     if (count >= lifespan) { evolve(); count = 0; }
 
-    // Update UI simple
-    document.getElementById('data').innerText = Math.floor(gameState.data);
-    document.getElementById('gen').innerText = gameState.generation;
+    // HUD (Utilise Formatter.js)
+    let now = performance.now();
+    if (now - lastTime >= 1000) {
+        document.getElementById('gflops').innerHTML = Formatter.format(totalOps, "FLOPS");
+        document.getElementById('data').innerHTML = Formatter.format(gameState.data);
+        document.getElementById('gen').innerText = gameState.generation;
+        totalOps = 0;
+        lastTime = now;
+    }
+
+    // UI Buttons
     document.getElementById('buy-pop').disabled = gameState.data < 1;
     document.getElementById('buy-complex').disabled = gameState.data < 20;
 
     requestAnimationFrame(loop);
 }
 
-// ... Boutons d'achat ...
+// --- EVENTS ---
 document.getElementById('buy-pop').onclick = () => {
     if (gameState.data >= 1) {
         gameState.data -= 1;
@@ -182,6 +204,16 @@ document.getElementById('buy-complex').onclick = () => {
         gameState.complexity++;
         save();
     }
+};
+
+document.getElementById('mut-slider').oninput = (e) => {
+    gameState.mutationRate = e.target.value / 100;
+    document.getElementById('mut-val').innerText = e.target.value;
+};
+
+window.onresize = () => {
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    target.x = canvas.width / 2;
 };
 
 setup();
