@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#00ff41">
-<meta name="apple-mobile-web-app-capable" content="yes">
-
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00ff41">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Core Burner - PWA</title>
@@ -20,22 +19,22 @@
         <div class="stats-grid">
             <div class="stat-box">
                 <label>DATA COLLECTÉE</label>
-                <div class="value"><span id="data">0</span> <small>TB</small></div>
+                <div class="value" id="data">0</div>
             </div>
             <div class="stat-box">
-                <label>PUISSANCE (MFLOPS)</label>
-                <div class="value" id="gflops">0.0000</div>
+                <label>PUISSANCE DE CALCUL</label>
+                <div class="value" id="gflops">0</div>
             </div>
         </div>
 
         <div class="controls">
             <button class="btn" id="buy-pop">
-                <span>+1 UNITÉS</span>
-                <small>COÛT: 1 TB</small>
+                <span>+1 BOT</span>
+                <small>COÛT: 1 DATA</small>
             </button>
             <button class="btn" id="buy-complex">
-                <span>+ COMPLEXITÉ</span>
-                <small>COÛT: 50 TB</small>
+                <span>+ INTELLIGENCE</span>
+                <small>COÛT: 20 DATA</small>
             </button>
             <div class="slider-group">
                 <label>MUTATION: <span id="mut-val">5</span>%</label>
@@ -48,8 +47,9 @@
         </div>
     </div>
 
-        <canvas id="sim"></canvas>
+    <canvas id="sim"></canvas>
 
+    <script src="formatter.js"></script>
     <script src="main.js"></script>
 
     <script>
@@ -66,7 +66,6 @@
           });
         });
 
-        // Sécurité supplémentaire : refresh si le worker prend le contrôle
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (refreshing) return;
