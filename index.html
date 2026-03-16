@@ -48,26 +48,32 @@
         </div>
     </div>
 
-    <canvas id="sim"></canvas>
+        <canvas id="sim"></canvas>
 
     <script src="main.js"></script>
 
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log("Nouvelle version détectée, redémarrage...");
+                window.location.reload(); 
+              }
+            });
+          });
+        });
 
- if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').then(reg => {
-    reg.addEventListener('updatefound', () => {
-      const newWorker = reg.installing;
-      newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          // Une mise à jour est disponible et installée
-          console.log("Nouvelle version détectée, redémarrage...");
-          window.location.reload(); 
-        }
-      });
-    });
-  });
-}
-
-<script>
+        // Sécurité supplémentaire : refresh si le worker prend le contrôle
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      }
+    </script>
 </body>
 </html>
