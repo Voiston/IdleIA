@@ -3,133 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Evolution Stress Test</title>
+    <title>Multi-Core AI Burner</title>
     <style>
-        body { margin: 0; background: #111; color: #0f0; font-family: monospace; overflow: hidden; }
-        canvas { display: block; }
-        #stats { position: absolute; top: 10px; left: 10px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 5px; }
+        body { margin: 0; background: #0a0a0a; color: #00ff41; font-family: 'Segoe UI', monospace; overflow: hidden; }
+        canvas { display: block; filter: contrast(1.2) brightness(1.2); }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 15px; border: 2px solid #00ff41; border-radius: 8px; width: 220px; box-shadow: 0 0 20px rgba(0,255,65,0.2); }
+        .stat { margin-bottom: 5px; font-size: 14px; }
+        #gflops { color: #ff4444; font-size: 1.4em; font-weight: bold; }
+        .btn { background: #00ff41; color: black; border: none; padding: 8px; margin-top: 8px; cursor: pointer; font-weight: bold; width: 100%; text-transform: uppercase; }
+        .btn:disabled { background: #1a3321; color: #336644; }
+        .warning { color: #ffcc00; font-size: 10px; margin-top: 10px; line-height: 1.2; }
     </style>
 </head>
 <body>
-    <div id="stats">
-        Génération: <span id="gen">1</span><br>
-        Population: <span id="pop">500</span><br>
-        FPS: <span id="fps">0</span>
+    <div id="ui">
+        <div class="stat">DATA: <span id="data">0</span> TB</div>
+        <div class="stat">CŒURS UTILISÉS: <span id="cores">0</span></div>
+        <div class="stat" style="margin-top:10px;">PUISSANCE :</div>
+        <div id="gflops">0.0000</div>
+        <div class="stat">GFLOPS ESTIMÉS</div>
+        <hr style="border:0; border-top:1px solid #00ff41;">
+        <button class="btn" id="buy-pop">POPULATION +500 (10 TB)</button>
+        <button class="btn" id="buy-complex">COMPLEXITÉ +1 (50 TB)</button>
+        <div class="warning">ATTENTION : L'usage intensif peut provoquer une chauffe importante et un bridage thermique.</div>
     </div>
     <canvas id="sim"></canvas>
 
 <script>
+// --- CONFIGURATION WORKER ---
+const workerCode = `
+    self.onmessage = function(e) {
+        const { subPop, count, target, complexity } = e.data;
+        let ops = 0;
+        
+        const updatedPop = subPop.map(dot => {
+            if (dot.dead || dot.reached) return dot;
+            
+            // Simulation de charge CPU artificielle via la "Complexité"
+            for(let i = 0; i < complexity; i++) {
+                dot.vel.x += Math.sin(dot.dna[count].x) * 0.1;
+                dot.vel.y += Math.cos(dot.dna[count].y) * 0.1;
+                ops += 10; // sinus/cosinus sont coûteux
+            }
+
+            dot.pos.x += dot.vel.x;
+            dot.pos.y += dot.vel.y;
+            
+            let dx = dot.pos.x - target.x;
+            let dy = dot.pos.y - target.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            ops += 15;
+
+            if (dist < 15) dot.reached = true;
+            if (dot.pos.x < 0 || dot.pos.x > 2000 || dot.pos.y < 0 || dot.pos.y > 2000) dot.dead = true;
+
+            return dot;
+        });
+        self.postMessage({ updatedPop, ops });
+    };
+`;
+
+// --- INITIALISATION ---
 const canvas = document.getElementById('sim');
 const ctx = canvas.getContext('2d');
-const genEl = document.getElementById('gen');
-const fpsEl = document.getElementById('fps');
+const numCores = navigator.hardwareConcurrency || 4;
+document.getElementById('cores').innerText = numCores;
 
-let width, height;
-let generation = 1;
-let frames = 0;
-let lastTime = performance.now();
-
-// CONFIGURATION (Augmente "popSize" pour faire chauffer le téléphone)
-const popSize = 800; 
-const lifespan = 200; 
+let data = 0;
+let popSize = 1000;
+let complexity = 1;
+let lifespan = 150;
 let count = 0;
+let target = { x: 0, y: 100 };
 let population = [];
-let target = { x: 0, y: 50 };
+let workers = [];
+let lastTime = performance.now();
+let totalOpsThisSecond = 0;
+
+// Création des Workers
+const blob = new Blob([workerCode], { type: 'application/javascript' });
+const workerUrl = URL.createObjectURL(blob);
+for(let i=0; i<numCores; i++) workers.push(new Worker(workerUrl));
+
+function generateDNA() {
+    return Array.from({length: lifespan}, () => ({ x: Math.random()*2-1, y: Math.random()*2-1 }));
+}
 
 function init() {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
-    target.x = width / 2;
-    for(let i=0; i<popSize; i++) population.push(new SmartDot());
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    target.x = canvas.width / 2;
+    population = Array.from({length: popSize}, () => ({
+        pos: { x: canvas.width/2, y: canvas.height-50 },
+        vel: { x: 0, y: 0 },
+        dna: generateDNA(),
+        dead: false, reached: false
+    }));
 }
 
-class SmartDot {
-    constructor(dna) {
-        this.pos = { x: width / 2, y: height - 50 };
-        this.vel = { x: 0, y: 0 };
-        this.acc = { x: 0, y: 0 };
-        this.dna = dna || Array.from({length: lifespan}, () => ({ x: Math.random()*2-1, y: Math.random()*2-1 }));
-        this.fitness = 0;
-        this.dead = false;
-        this.reached = false;
-    }
-
-    update() {
-        if (this.dead || this.reached) return;
-        
-        // Applique la force de l'ADN
-        this.acc = this.dna[count];
-        this.vel.x += this.acc.x;
-        this.vel.y += this.acc.y;
-        this.pos.x += this.vel.x;
-        this.pos.y += this.vel.y;
-
-        // Collisions
-        if (this.pos.x < 0 || this.pos.x > width || this.pos.y < 0 || this.pos.y > height) this.dead = true;
-        
-        // Cible atteinte
-        let d = Math.hypot(this.pos.x - target.x, this.pos.y - target.y);
-        if (d < 10) { this.reached = true; this.pos = target; }
-    }
-
-    draw() {
-        ctx.fillStyle = this.reached ? '#ff0' : 'rgba(0, 255, 0, 0.3)';
-        ctx.fillRect(this.pos.x, this.pos.y, 2, 2);
-    }
-}
-
-function nextGeneration() {
-    // Calcul de la fitness (plus près = mieux)
-    population.forEach(dot => {
-        let d = Math.hypot(dot.pos.x - target.x, dot.pos.y - target.y);
-        dot.fitness = 1 / (d + 1);
-        if (dot.reached) dot.fitness *= 10;
+// --- BOUCLE DE JEU ---
+async function updateFrame() {
+    const segmentSize = Math.floor(popSize / numCores);
+    const promises = workers.map((worker, i) => {
+        return new Promise(resolve => {
+            worker.onmessage = (e) => resolve(e.data);
+            const start = i * segmentSize;
+            const end = (i === numCores - 1) ? popSize : (i + 1) * segmentSize;
+            worker.postMessage({
+                subPop: population.slice(start, end),
+                count, target, complexity
+            });
+        });
     });
 
-    // Sélection simplifiée (on prend le meilleur)
-    population.sort((a, b) => b.fitness - a.fitness);
-    let bestDNA = population[0].dna;
-
-    // Nouvelle population avec mutations
-    population = population.map(() => {
-        let newDna = bestDNA.map(vec => (Math.random() < 0.02) ? { x: Math.random()*2-1, y: Math.random()*2-1 } : vec);
-        return new SmartDot(newDna);
-    });
-
-    count = 0;
-    generation++;
-    genEl.innerText = generation;
-}
-
-function loop() {
-    ctx.clearRect(0, 0, width, height);
+    const results = await Promise.all(promises);
     
-    // Dessin cible
-    ctx.fillStyle = 'red';
-    ctx.beginPath(); ctx.arc(target.x, target.y, 10, 0, Math.PI*2); ctx.fill();
-
-    // Update bots
-    population.forEach(dot => {
-        dot.update();
-        dot.draw();
+    // Fusion des résultats et calcul des GFLOPS
+    let newPop = [];
+    results.forEach(res => {
+        newPop = newPop.concat(res.updatedPop);
+        totalOpsThisSecond += res.ops;
     });
+    population = newPop;
+
+    // Rendu graphique
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+    ctx.fillStyle = '#00ff41';
+    population.forEach(d => {
+        if(!d.dead) ctx.fillRect(d.pos.x, d.pos.y, 2, 2);
+        if(d.reached) data += 0.01; // Data gagnée lentement
+    });
+
+    // Cible
+    ctx.fillStyle = 'red';
+    ctx.beginPath(); ctx.arc(target.x, target.y, 15, 0, Math.PI*2); ctx.fill();
 
     count++;
-    if (count >= lifespan) nextGeneration();
+    if (count >= lifespan) {
+        // Sélection naturelle simple (le premier qui a atteint gagne)
+        let winner = population.find(d => d.reached) || population[0];
+        population = population.map(() => ({
+            pos: { x: canvas.width/2, y: canvas.height-50 },
+            vel: { x: 0, y: 0 },
+            dna: winner.dna.map(v => Math.random() < 0.05 ? {x:Math.random()*2-1, y:Math.random()*2-1} : v),
+            dead: false, reached: false
+        }));
+        count = 0;
+    }
 
-    // FPS counter
-    frames++;
+    // Update UI Stats
     let now = performance.now();
-    if (now - lastTime >= 1000) {
-        fpsEl.innerText = frames;
-        frames = 0;
+    if(now - lastTime >= 1000) {
+        document.getElementById('gflops').innerText = (totalOpsThisSecond / 1e9).toFixed(4);
+        document.getElementById('data').innerText = Math.floor(data);
+        totalOpsThisSecond = 0;
         lastTime = now;
     }
-    requestAnimationFrame(loop);
+
+    // Upgrades
+    document.getElementById('buy-pop').disabled = data < 10;
+    document.getElementById('buy-complex').disabled = data < 50;
+
+    requestAnimationFrame(updateFrame);
 }
 
+document.getElementById('buy-pop').onclick = () => { data -= 10; popSize += 500; init(); };
+document.getElementById('buy-complex').onclick = () => { data -= 50; complexity += 5; };
+
 init();
-loop();
+updateFrame();
 </script>
 </body>
 </html>
