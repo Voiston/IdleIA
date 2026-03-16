@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Evolution Stress Test</title>
+    <style>
+        body { margin: 0; background: #111; color: #0f0; font-family: monospace; overflow: hidden; }
+        canvas { display: block; }
+        #stats { position: absolute; top: 10px; left: 10px; pointer-events: none; background: rgba(0,0,0,0.5); padding: 5px; }
+    </style>
+</head>
+<body>
+    <div id="stats">
+        Génération: <span id="gen">1</span><br>
+        Population: <span id="pop">500</span><br>
+        FPS: <span id="fps">0</span>
+    </div>
+    <canvas id="sim"></canvas>
+
+<script>
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+const genEl = document.getElementById('gen');
+const fpsEl = document.getElementById('fps');
+
+let width, height;
+let generation = 1;
+let frames = 0;
+let lastTime = performance.now();
+
+// CONFIGURATION (Augmente "popSize" pour faire chauffer le téléphone)
+const popSize = 800; 
+const lifespan = 200; 
+let count = 0;
+let population = [];
+let target = { x: 0, y: 50 };
+
+function init() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    target.x = width / 2;
+    for(let i=0; i<popSize; i++) population.push(new SmartDot());
+}
+
+class SmartDot {
+    constructor(dna) {
+        this.pos = { x: width / 2, y: height - 50 };
+        this.vel = { x: 0, y: 0 };
+        this.acc = { x: 0, y: 0 };
+        this.dna = dna || Array.from({length: lifespan}, () => ({ x: Math.random()*2-1, y: Math.random()*2-1 }));
+        this.fitness = 0;
+        this.dead = false;
+        this.reached = false;
+    }
+
+    update() {
+        if (this.dead || this.reached) return;
+        
+        // Applique la force de l'ADN
+        this.acc = this.dna[count];
+        this.vel.x += this.acc.x;
+        this.vel.y += this.acc.y;
+        this.pos.x += this.vel.x;
+        this.pos.y += this.vel.y;
+
+        // Collisions
+        if (this.pos.x < 0 || this.pos.x > width || this.pos.y < 0 || this.pos.y > height) this.dead = true;
+        
+        // Cible atteinte
+        let d = Math.hypot(this.pos.x - target.x, this.pos.y - target.y);
+        if (d < 10) { this.reached = true; this.pos = target; }
+    }
+
+    draw() {
+        ctx.fillStyle = this.reached ? '#ff0' : 'rgba(0, 255, 0, 0.3)';
+        ctx.fillRect(this.pos.x, this.pos.y, 2, 2);
+    }
+}
+
+function nextGeneration() {
+    // Calcul de la fitness (plus près = mieux)
+    population.forEach(dot => {
+        let d = Math.hypot(dot.pos.x - target.x, dot.pos.y - target.y);
+        dot.fitness = 1 / (d + 1);
+        if (dot.reached) dot.fitness *= 10;
+    });
+
+    // Sélection simplifiée (on prend le meilleur)
+    population.sort((a, b) => b.fitness - a.fitness);
+    let bestDNA = population[0].dna;
+
+    // Nouvelle population avec mutations
+    population = population.map(() => {
+        let newDna = bestDNA.map(vec => (Math.random() < 0.02) ? { x: Math.random()*2-1, y: Math.random()*2-1 } : vec);
+        return new SmartDot(newDna);
+    });
+
+    count = 0;
+    generation++;
+    genEl.innerText = generation;
+}
+
+function loop() {
+    ctx.clearRect(0, 0, width, height);
+    
+    // Dessin cible
+    ctx.fillStyle = 'red';
+    ctx.beginPath(); ctx.arc(target.x, target.y, 10, 0, Math.PI*2); ctx.fill();
+
+    // Update bots
+    population.forEach(dot => {
+        dot.update();
+        dot.draw();
+    });
+
+    count++;
+    if (count >= lifespan) nextGeneration();
+
+    // FPS counter
+    frames++;
+    let now = performance.now();
+    if (now - lastTime >= 1000) {
+        fpsEl.innerText = frames;
+        frames = 0;
+        lastTime = now;
+    }
+    requestAnimationFrame(loop);
+}
+
+init();
+loop();
+</script>
+</body>
+</html>
