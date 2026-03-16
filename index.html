@@ -30,95 +30,124 @@
     <canvas id="sim"></canvas>
 
 <script>
-// --- CONFIGURATION WORKER ---
+const canvas = document.getElementById('sim');
+const ctx = canvas.getContext('2d');
+const numCores = navigator.hardwareConcurrency || 4;
+
+// --- ETAT DU JEU ---
+let gameState = JSON.parse(localStorage.getItem('idle_ai_save')) || {
+    data: 0,
+    popSize: 1000,
+    complexity: 1,
+    mutationRate: 0.05,
+    generation: 1
+};
+
+let lifespan = 180;
+let count = 0;
+let target = { x: 0, y: 100 };
+let population = [];
+let workers = [];
+let totalOpsThisSecond = 0;
+let lastTime = performance.now();
+
+// --- LOGIQUE DES WORKERS ---
 const workerCode = `
     self.onmessage = function(e) {
         const { subPop, count, target, complexity } = e.data;
         let ops = 0;
-        
         const updatedPop = subPop.map(dot => {
             if (dot.dead || dot.reached) return dot;
-            
-            // Simulation de charge CPU artificielle via la "Complexité"
             for(let i = 0; i < complexity; i++) {
-                dot.vel.x += Math.sin(dot.dna[count].x) * 0.1;
-                dot.vel.y += Math.cos(dot.dna[count].y) * 0.1;
-                ops += 10; // sinus/cosinus sont coûteux
+                dot.vel.x += Math.sin(dot.dna[count].x) * 0.15;
+                dot.vel.y += Math.cos(dot.dna[count].y) * 0.15;
+                ops += 12;
             }
-
-            dot.pos.x += dot.vel.x;
-            dot.pos.y += dot.vel.y;
-            
-            let dx = dot.pos.x - target.x;
-            let dy = dot.pos.y - target.y;
+            dot.pos.x += dot.vel.x; dot.pos.y += dot.vel.y;
+            let dx = dot.pos.x - target.x, dy = dot.pos.y - target.y;
             let dist = Math.sqrt(dx*dx + dy*dy);
-            ops += 15;
-
+            ops += 10;
             if (dist < 15) dot.reached = true;
-            if (dot.pos.x < 0 || dot.pos.x > 2000 || dot.pos.y < 0 || dot.pos.y > 2000) dot.dead = true;
-
+            if (dot.pos.x < 0 || dot.pos.x > 3000 || dot.pos.y < 0 || dot.pos.y > 3000) dot.dead = true;
+            dot.fitness = 1 / (dist + 1); // Calcul de performance
+            if (dot.reached) dot.fitness *= 20;
             return dot;
         });
         self.postMessage({ updatedPop, ops });
     };
 `;
 
-// --- INITIALISATION ---
-const canvas = document.getElementById('sim');
-const ctx = canvas.getContext('2d');
-const numCores = navigator.hardwareConcurrency || 4;
-document.getElementById('cores').innerText = numCores;
-
-let data = 0;
-let popSize = 1000;
-let complexity = 1;
-let lifespan = 150;
-let count = 0;
-let target = { x: 0, y: 100 };
-let population = [];
-let workers = [];
-let lastTime = performance.now();
-let totalOpsThisSecond = 0;
-
-// Création des Workers
 const blob = new Blob([workerCode], { type: 'application/javascript' });
 const workerUrl = URL.createObjectURL(blob);
 for(let i=0; i<numCores; i++) workers.push(new Worker(workerUrl));
-
-function generateDNA() {
-    return Array.from({length: lifespan}, () => ({ x: Math.random()*2-1, y: Math.random()*2-1 }));
-}
 
 function init() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     target.x = canvas.width / 2;
-    population = Array.from({length: popSize}, () => ({
+    population = Array.from({length: gameState.popSize}, () => ({
         pos: { x: canvas.width/2, y: canvas.height-50 },
         vel: { x: 0, y: 0 },
-        dna: generateDNA(),
-        dead: false, reached: false
+        dna: Array.from({length: lifespan}, () => ({ x: Math.random()*2-1, y: Math.random()*2-1 })),
+        dead: false, reached: false, fitness: 0
     }));
+    document.getElementById('cores').innerText = numCores;
 }
 
-// --- BOUCLE DE JEU ---
+// --- MÉCANIQUE D'ÉVOLUTION ---
+function evolve() {
+    // 1. Trier par fitness
+    population.sort((a, b) => b.fitness - a.fitness);
+    
+    // 2. Sélectionner l'élite (les 10% meilleurs)
+    const eliteCount = Math.max(2, Math.floor(gameState.popSize * 0.1));
+    const elite = population.slice(0, eliteCount);
+    
+    // 3. Créer la nouvelle génération
+    population = population.map(() => {
+        // Choisir deux parents parmi l'élite
+        const p1 = elite[Math.floor(Math.random() * elite.length)];
+        const p2 = elite[Math.floor(Math.random() * elite.length)];
+        
+        const childDNA = p1.dna.map((gene, idx) => {
+            // Crossover (mélange des parents)
+            let baseGene = Math.random() > 0.5 ? gene : p2.dna[idx];
+            // Mutation (hasard total)
+            if (Math.random() < gameState.mutationRate) {
+                return { x: Math.random()*2-1, y: Math.random()*2-1 };
+            }
+            return baseGene;
+        });
+
+        return {
+            pos: { x: canvas.width/2, y: canvas.height-50 },
+            vel: { x: 0, y: 0 },
+            dna: childDNA,
+            dead: false, reached: false, fitness: 0
+        };
+    });
+
+    gameState.generation++;
+    save();
+}
+
+function save() {
+    localStorage.setItem('idle_ai_save', JSON.stringify(gameState));
+}
+
 async function updateFrame() {
-    const segmentSize = Math.floor(popSize / numCores);
+    const segmentSize = Math.ceil(gameState.popSize / numCores);
     const promises = workers.map((worker, i) => {
         return new Promise(resolve => {
             worker.onmessage = (e) => resolve(e.data);
-            const start = i * segmentSize;
-            const end = (i === numCores - 1) ? popSize : (i + 1) * segmentSize;
             worker.postMessage({
-                subPop: population.slice(start, end),
-                count, target, complexity
+                subPop: population.slice(i * segmentSize, (i + 1) * segmentSize),
+                count, target, complexity: gameState.complexity
             });
         });
     });
 
     const results = await Promise.all(promises);
-    
-    // Fusion des résultats et calcul des GFLOPS
     let newPop = [];
     results.forEach(res => {
         newPop = newPop.concat(res.updatedPop);
@@ -126,53 +155,50 @@ async function updateFrame() {
     });
     population = newPop;
 
-    // Rendu graphique
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(0,0,canvas.width, canvas.height);
-    ctx.fillStyle = '#00ff41';
     population.forEach(d => {
-        if(!d.dead) ctx.fillRect(d.pos.x, d.pos.y, 2, 2);
-        if(d.reached) data += 0.01; // Data gagnée lentement
+        if(!d.dead) {
+            ctx.fillStyle = d.reached ? '#fff' : '#00ff41';
+            ctx.fillRect(d.pos.x, d.pos.y, 2, 2);
+        }
+        if(d.reached) gameState.data += 0.005;
     });
 
-    // Cible
     ctx.fillStyle = 'red';
     ctx.beginPath(); ctx.arc(target.x, target.y, 15, 0, Math.PI*2); ctx.fill();
 
     count++;
     if (count >= lifespan) {
-        // Sélection naturelle simple (le premier qui a atteint gagne)
-        let winner = population.find(d => d.reached) || population[0];
-        population = population.map(() => ({
-            pos: { x: canvas.width/2, y: canvas.height-50 },
-            vel: { x: 0, y: 0 },
-            dna: winner.dna.map(v => Math.random() < 0.05 ? {x:Math.random()*2-1, y:Math.random()*2-1} : v),
-            dead: false, reached: false
-        }));
+        evolve();
         count = 0;
     }
 
-    // Update UI Stats
     let now = performance.now();
     if(now - lastTime >= 1000) {
         document.getElementById('gflops').innerText = (totalOpsThisSecond / 1e9).toFixed(4);
-        document.getElementById('data').innerText = Math.floor(data);
+        document.getElementById('data').innerText = Math.floor(gameState.data);
+        document.getElementById('gen').innerText = gameState.generation;
         totalOpsThisSecond = 0;
         lastTime = now;
     }
-
-    // Upgrades
-    document.getElementById('buy-pop').disabled = data < 10;
-    document.getElementById('buy-complex').disabled = data < 50;
+    
+    // UI Updates
+    document.getElementById('buy-pop').disabled = gameState.data < 10;
+    document.getElementById('buy-complex').disabled = gameState.data < 50;
 
     requestAnimationFrame(updateFrame);
 }
 
-document.getElementById('buy-pop').onclick = () => { data -= 10; popSize += 500; init(); };
-document.getElementById('buy-complex').onclick = () => { data -= 50; complexity += 5; };
+// Actions
+document.getElementById('buy-pop').onclick = () => { gameState.data -= 10; gameState.popSize += 500; init(); };
+document.getElementById('buy-complex').onclick = () => { gameState.data -= 50; gameState.complexity += 5; };
 
 init();
 updateFrame();
+
+
+
 </script>
 </body>
 </html>
