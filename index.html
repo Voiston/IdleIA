@@ -58,25 +58,23 @@
     <!-- BOTTOM PANEL -->
     <div id="bottom-panel">
 
-        <!-- Handle TOUJOURS en premier dans le DOM = toujours visible quand collapsed -->
         <button id="panel-toggle">
             <div class="toggle-pip"></div>
             <span id="toggle-arrow">▲</span>
             <span id="toggle-label">MENU</span>
         </button>
 
-        <!-- Tout le reste est caché quand collapsed -->
         <div id="panel-inner">
 
             <!-- Tabs -->
             <div id="panel-nav">
                 <button class="nav-btn active" data-panel="bots">🤖 BOTS</button>
-                <button class="nav-btn" data-panel="skills">🧬 SKILLS</button>
+                <button class="nav-btn" data-panel="evol">🧬 ÉVOL</button>
+                <button class="nav-btn" data-panel="skills">⚡ SKILLS</button>
                 <button class="nav-btn" data-panel="market">📈 MARCHÉ</button>
                 <button class="nav-btn" data-panel="stats">📊 STATS</button>
             </div>
 
-            <!-- Panel content -->
             <div id="panel-content">
 
                 <!-- BOTS -->
@@ -89,10 +87,6 @@
                             <span>+INTEL</span><small>COÛT: 20</small>
                         </button>
                     </div>
-                    <div class="slider-group">
-                        <label>MUTATION: <span id="mut-val">5</span>%</label>
-                        <input type="range" id="mut-slider" min="1" max="50" value="5">
-                    </div>
                     <div class="row-2 mt8">
                         <button class="btn btn-prestige-buy" id="btn-prestige">
                             <span>⬆ PRESTIGE</span><small id="prestige-cost">COÛT: 500</small>
@@ -101,6 +95,41 @@
                             <span>🗑 RESET</span><small>TOUT EFFACER</small>
                         </button>
                     </div>
+                </div>
+
+                <!-- ÉVOLUTION -->
+                <div class="panel" id="panel-evol">
+                    <div class="slider-group">
+                        <label>MUTATION: <span id="mut-val">5</span>%
+                            <span class="param-hint">Chance de modifier un gène</span>
+                        </label>
+                        <input type="range" id="mut-slider" min="1" max="50" value="5">
+                    </div>
+                    <div class="slider-group">
+                        <label>ÉLITE: <span id="elite-val">20</span>%
+                            <span class="param-hint">Part de la pop. qui se reproduit</span>
+                        </label>
+                        <input type="range" id="elite-slider" min="5" max="50" value="20" step="5">
+                    </div>
+                    <div class="slider-group">
+                        <label>CROSSOVER: <span id="cross-val">50</span>%
+                            <span class="param-hint">Chance de mélanger 2 parents</span>
+                        </label>
+                        <input type="range" id="cross-slider" min="0" max="100" value="50" step="10">
+                    </div>
+                    <div class="slider-group">
+                        <label>ÉLITISME: <span id="elitism-val">0</span> bots
+                            <span class="param-hint">Copies exactes des meilleurs (0 = désactivé)</span>
+                        </label>
+                        <input type="range" id="elitism-slider" min="0" max="10" value="0" step="1">
+                    </div>
+                    <div class="slider-group">
+                        <label>PRESSION: <span id="pressure-val">1.0</span>×
+                            <span class="param-hint">Force de sélection des meilleurs</span>
+                        </label>
+                        <input type="range" id="pressure-slider" min="10" max="40" value="10" step="5">
+                    </div>
+                    <div class="evol-info" id="evol-info">—</div>
                 </div>
 
                 <!-- SKILLS -->
@@ -143,15 +172,19 @@
                         <span class="stat-lbl">WORKERS</span><span id="cores">—</span>
                         <span class="stat-lbl ml">NIVEAU</span><span id="level-display2">1</span>
                     </div>
+                    <div class="stats-row">
+                        <span class="stat-lbl">FITNESS MOY.</span><span id="avg-fitness">—</span>
+                        <span class="stat-lbl ml">MEILLEUR</span><span id="best-fitness">—</span>
+                    </div>
                     <div class="section-lbl">FITNESS / GÉNÉRATION</div>
                     <canvas id="fitness-graph" width="340" height="55"></canvas>
                     <div class="section-lbl">DIVERSITÉ ADN — <span id="dna-diversity">0%</span></div>
                     <div class="dna-bar-wrap"><div class="dna-bar-fill2" id="dna-bar-fill2"></div></div>
                 </div>
 
-            </div><!-- /panel-content -->
-        </div><!-- /panel-inner -->
-    </div><!-- /bottom-panel -->
+            </div>
+        </div>
+    </div>
 
     <script src="formatter.js"></script>
     <script src="main.js"></script>
