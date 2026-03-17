@@ -855,32 +855,19 @@ function showTooltip(key, anchorEl) {
     tooltipTitle.innerText = tip.title;
     tooltipBody.innerText  = tip.body;
 
-    // Position : essaie au-dessus de l'élément, sinon en-dessous
-    tooltipEl.style.opacity = '0';
-    tooltipEl.style.display = 'block';
-    tooltipEl.classList.remove('visible');
-
-    const rect   = anchorEl.getBoundingClientRect();
-    const tw     = Math.min(240, window.innerWidth - 24);
-    let   left   = rect.left + rect.width / 2 - tw / 2;
+    const rect = anchorEl.getBoundingClientRect();
+    const tw   = Math.min(260, window.innerWidth - 24);
+    let left   = rect.left + rect.width / 2 - tw / 2;
     left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
 
-    // Préfère au-dessus
-    const spaceAbove = rect.top;
-    const tipH = 160; // hauteur estimée
-    let top;
-    if (spaceAbove > tipH + 8) {
-        top = rect.top - tipH - 8;
-    } else {
-        top = rect.bottom + 8;
-    }
+    const tipH = 180;
+    let top = (rect.top > tipH + 12) ? rect.top - tipH - 8 : rect.bottom + 8;
     top = Math.max(8, Math.min(top, window.innerHeight - tipH - 8));
 
-    tooltipEl.style.width  = tw + 'px';
-    tooltipEl.style.left   = left + 'px';
-    tooltipEl.style.top    = top + 'px';
-
-    requestAnimationFrame(() => tooltipEl.classList.add('visible'));
+    tooltipEl.style.width = tw + 'px';
+    tooltipEl.style.left  = left + 'px';
+    tooltipEl.style.top   = top + 'px';
+    tooltipEl.classList.add('visible');
     tooltipOpen = true;
 }
 
@@ -889,46 +876,34 @@ function hideTooltip() {
     tooltipOpen = false;
 }
 
-// Fermer au tap sur le tooltip lui-même
-tooltipEl.addEventListener('click', hideTooltip);
-// Fermer au tap ailleurs
-document.addEventListener('touchstart', e => {
-    if (tooltipOpen && !tooltipEl.contains(e.target) && !e.target.classList.contains('tip-icon')) {
-        hideTooltip();
-    }
-}, {passive: true});
-document.addEventListener('mousedown', e => {
-    if (tooltipOpen && !tooltipEl.contains(e.target) && !e.target.classList.contains('tip-icon')) {
-        hideTooltip();
-    }
-});
+tooltipEl.addEventListener('click', e => { e.stopPropagation(); hideTooltip(); });
 
-// Attacher les écouteurs sur toutes les icônes ⓘ
+// Délégation globale : intercepte TOUT touchstart/click sur les icônes ⓘ
+// en phase de capture (3ème arg = true) pour battre les handlers des boutons parents
+function handleTipEvent(e) {
+    const icon = e.target.closest('.tip-icon');
+    if (!icon) {
+        // Tap ailleurs → ferme si ouvert
+        if (tooltipOpen && !tooltipEl.contains(e.target)) hideTooltip();
+        return;
+    }
+    e.stopPropagation();
+    e.preventDefault();
+    const key = icon.dataset.tip;
+    if (!key) return;
+    if (tooltipOpen && tooltipTitle.innerText === (TIPS[key]?.title || '')) {
+        hideTooltip();
+    } else {
+        showTooltip(key, icon);
+    }
+}
+
+// Capture phase sur touchstart ET click pour couvrir desktop + mobile
+document.addEventListener('touchstart', handleTipEvent, { capture: true, passive: false });
+document.addEventListener('click',      handleTipEvent, { capture: true });
+
 function initTooltips() {
-    document.querySelectorAll('.tip-icon').forEach(icon => {
-        const key = icon.dataset.tip;
-
-        // Tap simple sur l'icône → affiche tooltip
-        icon.addEventListener('click', e => {
-            e.stopPropagation();
-            e.preventDefault();
-            if (tooltipOpen && tooltipTitle.innerText === (TIPS[key]?.title || '')) {
-                hideTooltip();
-            } else {
-                showTooltip(key, icon);
-            }
-        });
-    });
-
-    // Skills : icône ⓘ sur chaque bouton skill (injectée dynamiquement)
-    // Les skills sont générés après, donc on délègue
-    document.getElementById('panel-skills').addEventListener('click', e => {
-        if (!e.target.classList.contains('tip-icon')) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const key = e.target.dataset.tip;
-        if (key) showTooltip(key, e.target);
-    });
+    // Rien à faire — tout est géré par délégation globale en capture
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
