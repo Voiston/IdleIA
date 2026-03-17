@@ -82,7 +82,7 @@ const SKILLS={
 // GAME STATE
 // ─────────────────────────────────────────────────────────────────────────────
 const GS_DEF={
-    data:0, gflopsAccum:0, popSize:5, complexity:1, mutationRate:.05,
+    data:0, gflopsAccum:0, popSize:6, complexity:1, mutationRate:.05,
     generation:1, purchasedPop:0, purchasedIntel:0,
     skillLevels:{speed:0,memory:0,resistance:0,sensors:0},
     prestige:0, prestigeMultiplier:1, marketRate:1.0,
@@ -286,7 +286,7 @@ function updateAQ(now){
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNTIME
 // ─────────────────────────────────────────────────────────────────────────────
-const LIFESPAN=600;
+const LIFESPAN=900;
 let   fc=0;
 const target={x:0,y:0,baseX:0,angle:0};
 let   workers=[],numW=2;
