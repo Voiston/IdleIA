@@ -1,7 +1,8 @@
 /**
- * AI CORE - EVOLUTION V6
+ * AI CORE - EVOLUTION V6+
  * Sélection améliorée : bestDist, bonus vitesse, exclusion morts,
  * crossover, pression de sélection + contrôles UI dédiés
+ * + UPGRADES GFLOPS
  */
 'use strict';
 
@@ -79,6 +80,57 @@ const SKILLS={
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UPGRADES GFLOPS
+// ─────────────────────────────────────────────────────────────────────────────
+const GFLOPS_UPGRADES = {
+    workerBoost: {
+        label: 'BOOST WORKER',
+        desc: '+20% vitesse workers',
+        baseCost: 5,
+        growth: 1.5,
+        maxLevel: 10,
+        effect: (lvl) => 1 + lvl * 0.20
+    },
+    populationAmp: {
+        label: 'AMP. POPULATION',
+        desc: '+50 bots simultanés',
+        baseCost: 8,
+        growth: 1.6,
+        maxLevel: 8,
+        effect: (lvl) => lvl * 50
+    },
+    mutationTurbo: {
+        label: 'MUTATION TURBO',
+        desc: '+10% taux mutation',
+        baseCost: 6,
+        growth: 1.55,
+        maxLevel: 12,
+        effect: (lvl) => lvl * 0.10
+    },
+    fitnessAmp: {
+        label: 'AMP. FITNESS',
+        desc: 'Fitness ×1.5 par niv',
+        baseCost: 10,
+        growth: 1.7,
+        maxLevel: 6,
+        effect: (lvl) => Math.pow(1.5, lvl)
+    },
+    dataMultiplier: {
+        label: 'MULT. DATA',
+        desc: '+5% gains data',
+        baseCost: 12,
+        growth: 1.8,
+        maxLevel: 15,
+        effect: (lvl) => 1 + lvl * 0.05
+    }
+};
+
+const getGflopsUpgradeCost = (upgradeId, level) => {
+    const up = GFLOPS_UPGRADES[upgradeId];
+    return Math.floor(up.baseCost * Math.pow(up.growth, level));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GAME STATE
 // ─────────────────────────────────────────────────────────────────────────────
 const GS_DEF={
@@ -88,13 +140,22 @@ const GS_DEF={
     prestige:0, prestigeMultiplier:1, marketRate:1.0,
     level:1, gensOnLevel:0,
     // paramètres de sélection
-    eliteRatio:   .20,   // part de la pop qui se reproduit
-    crossoverRate:.50,   // proba de faire un crossover à 2 parents
-    pressure:     1.0,   // exposant de sélection (1=linéaire, 2=quadratique...)
-    elitismCount: 0,     // N meilleurs copiés tels quels (0 = désactivé)
+    eliteRatio:   .20,
+    crossoverRate:.50,
+    pressure:     1.0,
+    elitismCount: 0,
+    // upgrades gflops
+    gflopsUpgradeLevels: {
+        workerBoost: 0,
+        populationAmp: 0,
+        mutationTurbo: 0,
+        fitnessAmp: 0,
+        dataMultiplier: 0
+    },
 };
 let gs=Object.assign({},GS_DEF,JSON.parse(localStorage.getItem('burner_v6')||'{}'));
 if(!gs.skillLevels) gs.skillLevels={...GS_DEF.skillLevels};
+if(!gs.gflopsUpgradeLevels) gs.gflopsUpgradeLevels={...GS_DEF.gflopsUpgradeLevels};
 // migration
 if(gs.eliteRatio===undefined)    gs.eliteRatio=GS_DEF.eliteRatio;
 if(gs.crossoverRate===undefined)  gs.crossoverRate=GS_DEF.crossoverRate;
@@ -117,12 +178,10 @@ self.onmessage=function(e){
         const dx=tx-d.x, dy=ty-d.y;
         const dist=Math.sqrt(dx*dx+dy*dy)||1;
 
-        // Attraction magnétique
         d.vx+=(dx/dist)*complexity*0.005;
         d.vy+=(dy/dist)*complexity*0.005;
         ops+=20;
 
-        // Répulsion obstacles (capteurs)
         if(sensorMult>0){
             for(let oi=0;oi<obstacles.length;oi++){
                 const ob=obstacles[oi];
@@ -133,7 +192,6 @@ self.onmessage=function(e){
             }
         }
 
-        // Gène ADN
         d.vx+=Math.cos(gene.a)*gene.f;
         d.vy+=Math.sin(gene.a)*gene.f;
         d.vx*=0.96; d.vy*=0.96;
@@ -141,32 +199,24 @@ self.onmessage=function(e){
         d.y+=d.vy*(speedMult||1);
         ops+=10;
 
-        // Collision obstacles
         for(let oi=0;oi<obstacles.length;oi++){
             const ob=obstacles[oi];
             if(d.x>=ob.x&&d.x<=ob.x+ob.w&&d.y>=ob.y&&d.y<=ob.y+ob.h){d.dead=true;break;}
         }
 
-        // Limites du canvas
         if(d.x<-100||d.x>5000||d.y<-100||d.y>5000) d.dead=true;
 
-        // Arrivée
         if(dist<25){d.reached=true; d.reachedFrame=fc;}
 
-        // ── FITNESS AMÉLIORÉE ──────────────────────────────────────────────
-        // 1. Meilleure distance atteinte (pas la distance finale)
         if(dist<d.bestDist) d.bestDist=dist;
 
-        // 2. Score de base : proximité maximale
         let fit=1/(d.bestDist+1);
 
-        // 3. Bonus vitesse si arrivé : récompense les bots rapides
         if(d.reached){
             const speedBonus=1+(lifespan-d.reachedFrame)/lifespan;
-            fit=2*speedBonus; // entre 2 et 4
+            fit=2*speedBonus;
         }
 
-        // 4. Pénalité mort : bots morts = fit négative pour les exclure de l'élite
         if(d.dead) fit=-1;
 
         d.fit=fit;
@@ -341,11 +391,9 @@ function showLvlBanner(l){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EVOLVE  — sélection améliorée
+// EVOLVE
 // ─────────────────────────────────────────────────────────────────────────────
 function weightedPickParent(pool){
-    // Pression de sélection : pondère les fitness par l'exposant `gs.pressure`
-    // pool est déjà trié par fitness décroissante
     const weights=pool.map((d,i)=>Math.pow((pool.length-i)/pool.length,gs.pressure));
     const total=weights.reduce((s,w)=>s+w,0);
     let r=Math.random()*total;
@@ -357,7 +405,6 @@ function weightedPickParent(pool){
 }
 
 function crossover(dnaA,dnaB,len){
-    // Échange de segments aléatoires (uniform crossover par blocs de 50 gènes)
     const child=new Array(len);
     const blockSize=50;
     for(let k=0;k<len;k++){
@@ -368,27 +415,23 @@ function crossover(dnaA,dnaB,len){
 }
 
 function evolve(){
-    // Fitness finale : stats
     const livePop=population.filter(d=>d.fit>=-1);
     lastAvgFit=livePop.reduce((s,d)=>s+Math.max(0,d.fit),0)/livePop.length;
     lastBestFit=Math.max(...livePop.map(d=>d.fit));
     fitnessHist.push(lastAvgFit);
     if(fitnessHist.length>60)fitnessHist.shift();
 
-    // Tri par fitness décroissante
     population.sort((a,b)=>b.fit-a.fit);
 
-    // Pool d'élite : exclure les bots morts (fit=-1) SAUF si tout le monde est mort
     const alive=population.filter(d=>!d.dead);
-    const pool=alive.length>0?alive:population; // fallback si extinction totale
+    const pool=alive.length>0?alive:population;
     const eliteCount=Math.max(1,Math.floor(pool.length*gs.eliteRatio));
     const elite=pool.slice(0,eliteCount);
 
-    const effMut=gs.mutationRate*(1-(gs.skillLevels.resistance||0)*.15);
+    const effMut=gs.mutationRate*(1-(gs.skillLevels.resistance||0)*.15)+(gs.gflopsUpgradeLevels.mutationTurbo||0)*0.10;
     const dnaLen=getDnaLen();
     const n=gs.popSize;
 
-    // Élitisme : copier les N meilleurs tels quels (sans mutation)
     const survivorCount=Math.min(gs.elitismCount, elite.length, n);
     const survivors=elite.slice(0,survivorCount).map(d=>{
         const s=createDot(d.dna.map(g=>({a:g.a,f:g.f})));
@@ -400,7 +443,6 @@ function evolve(){
         let childDna;
 
         if(Math.random()<gs.crossoverRate){
-            // Crossover : deux parents
             const parentB=weightedPickParent(elite);
             const baseDna=crossover(parentA.dna,parentB.dna,dnaLen);
             childDna=baseDna.map(g=>
@@ -409,7 +451,6 @@ function evolve(){
                     :{a:g.a,f:g.f}
             );
         } else {
-            // Clonage + mutation d'un seul parent
             childDna=Array.from({length:dnaLen},(_,k)=>{
                 const g=parentA.dna[k]||{a:Math.random()*Math.PI*2,f:Math.random()*.35};
                 return Math.random()<effMut
@@ -455,7 +496,7 @@ function dispatch(frame){
                 dots:payload,fc:frame,
                 tx:target.x,ty:target.y,
                 complexity:gs.complexity,
-                speedMult:skillMult('speed',.3),
+                speedMult:skillMult('speed',.3)*GFLOPS_UPGRADES.workerBoost.effect(gs.gflopsUpgradeLevels.workerBoost||0),
                 sensorMult:gs.skillLevels.sensors||0,
                 obstacles,lifespan:LIFESPAN
             });
@@ -501,11 +542,50 @@ function drawGraph(){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UPGRADES UI
+// ─────────────────────────────────────────────────────────────────────────────
+function renderUpgrades(){
+    const grid = document.getElementById('upgrades-grid');
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    for (const [upgradeId, upgrade] of Object.entries(GFLOPS_UPGRADES)) {
+        const lvl = gs.gflopsUpgradeLevels[upgradeId] || 0;
+        const cost = getGflopsUpgradeCost(upgradeId, lvl);
+        const canAfford = gs.gflopsAccum >= cost && lvl < upgrade.maxLevel;
+        
+        const btn = document.createElement('button');
+        btn.className = 'upgrade-btn';
+        btn.disabled = !canAfford;
+        
+        const levelText = lvl >= upgrade.maxLevel ? '✓' : `[${lvl}/${upgrade.maxLevel}]`;
+        btn.innerHTML = `
+            <span>${upgrade.label} ${levelText}</span>
+            <small>${upgrade.desc}</small>
+            <div class="upgrade-level">COÛT: ${cost} GFLOPS</div>
+        `;
+        
+        btn.addEventListener('click', () => {
+            if (gs.gflopsAccum >= cost && lvl < upgrade.maxLevel) {
+                gs.gflopsAccum -= cost;
+                gs.gflopsUpgradeLevels[upgradeId] = (gs.gflopsUpgradeLevels[upgradeId] || 0) + 1;
+                save();
+                updateUI();
+                renderUpgrades();
+            }
+        });
+        
+        grid.appendChild(btn);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // UI UPDATE
 // ─────────────────────────────────────────────────────────────────────────────
 function updateUI(){
     document.getElementById('data').innerHTML           =Formatter.format(gs.data);
     document.getElementById('gflops').innerHTML         =Formatter.format(totalOps,'F');
+    document.getElementById('gflops-available').innerText = Math.floor(gs.gflopsAccum);
     document.getElementById('gen').innerText            =gs.generation;
     document.getElementById('reached-count').innerText  =`${reachedGen}/${population.length}`;
     document.getElementById('prestige-mult').innerText  =gs.prestigeMultiplier.toFixed(1);
@@ -518,7 +598,6 @@ function updateUI(){
     document.getElementById('level-display').innerText  =`${gs.level} · ${totalReachedOnLevel}/${req}`;
     document.getElementById('level-display2').innerText =gs.level;
 
-    // Stats fitness
     document.getElementById('avg-fitness').innerText  =lastAvgFit.toFixed(3);
     document.getElementById('best-fitness').innerText =lastBestFit.toFixed(3);
 
@@ -542,7 +621,6 @@ function updateUI(){
         else{btn.querySelector('span').innerText=`${sk.label} [${lvl}/${sk.maxLevel}]`;btn.querySelector('small').innerText=`COÛT: ${cost}`;btn.disabled=gs.data<cost;}
     }
 
-    // Panneau évolution : résumé de la stratégie actuelle
     const aliveCount=population.filter(d=>!d.dead).length;
     const eliteN=Math.max(1,Math.floor(aliveCount*gs.eliteRatio));
     const elitismStr=gs.elitismCount>0?`Élitisme: ${gs.elitismCount} survivants · `:'';
@@ -551,6 +629,7 @@ function updateUI(){
         `${elitismStr}Crossover: ${(gs.crossoverRate*100).toFixed(0)}% · Pression: ${gs.pressure.toFixed(1)}×\n`+
         `Mutation effective: ${(gs.mutationRate*(1-(gs.skillLevels.resistance||0)*.15)*100).toFixed(1)}%`;
 
+    renderUpgrades();
     drawGraph();totalOps=0;
 }
 
@@ -587,17 +666,16 @@ async function loop(){
     ctx.fillStyle='rgba(5,10,5,.35)';
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Seuil élite pour affichage
     const alive=population.filter(d=>!d.dead);
     const eliteCount=Math.max(1,Math.floor(alive.length*gs.eliteRatio));
     const sortedAlive=[...alive].sort((a,b)=>b.fit-a.fit);
     const eliteThr=sortedAlive[eliteCount-1]?.fit||0;
 
-    // Dots
     for(const d of population){
         if(d.dead)continue;
         if(d.reached&&!d.rewarded){
-            gs.data+=gs.prestigeMultiplier;reachedGen++;totalReachedOnLevel++;d.rewarded=true;
+            const dataGain = gs.prestigeMultiplier * GFLOPS_UPGRADES.dataMultiplier.effect(gs.gflopsUpgradeLevels.dataMultiplier||0);
+            gs.data+=dataGain;reachedGen++;totalReachedOnLevel++;d.rewarded=true;
             if(aq.particles)spawnParticles(d.x,d.y);
         }
         const isElite=!d.reached&&d.fit>=eliteThr&&d.fit>0;
@@ -606,7 +684,6 @@ async function loop(){
             ctx.fillStyle='white';ctx.fillRect(d.x-1,d.y-1,5,5);
             if(aq.shadow)ctx.shadowBlur=0;
         } else {
-            // Fitness peut être négative (mort) ou entre 0 et ~4
             const fi=Math.max(0,Math.min(1,d.fit/4));
             ctx.fillStyle=d.reached?'#fff':COLOR_LUT[Math.min(255,fi*255|0)];
             ctx.fillRect(d.x,d.y,3,3);
@@ -684,7 +761,6 @@ document.getElementById('pressure-slider').addEventListener('input',function(){
     save();
 });
 
-// Sync sliders with loaded state
 function syncSliders(){
     const ms=document.getElementById('mut-slider');
     ms.value=Math.round(gs.mutationRate*100);
@@ -715,7 +791,7 @@ for(const id of Object.keys(SKILLS)){
     btn.innerHTML=`<span></span><small></small><i class="tip-icon" data-tip="skill-${id}" style="position:absolute;top:5px;right:5px;">i</i>`;
     btn.style.position='relative';
     btn.addEventListener('click',e=>{
-        if(e.target.classList.contains('tip-icon')) return; // handled by delegation
+        if(e.target.classList.contains('tip-icon')) return;
         const lvl=gs.skillLevels[id]||0,cost=skillCost(id);
         if(lvl<SKILLS[id].maxLevel&&gs.data>=cost){
             gs.data-=cost;gs.skillLevels[id]=lvl+1;save();updateUI();
@@ -831,7 +907,6 @@ const TIPS = {
     },
 };
 
-// Skills : générés dynamiquement depuis SKILLS
 Object.entries(SKILLS).forEach(([id, sk]) => {
     TIPS['skill-' + id] = {
         title: sk.label,
@@ -878,12 +953,9 @@ function hideTooltip() {
 
 tooltipEl.addEventListener('click', e => { e.stopPropagation(); hideTooltip(); });
 
-// Délégation globale : intercepte TOUT touchstart/click sur les icônes ⓘ
-// en phase de capture (3ème arg = true) pour battre les handlers des boutons parents
 function handleTipEvent(e) {
     const icon = e.target.closest('.tip-icon');
     if (!icon) {
-        // Tap ailleurs → ferme si ouvert
         if (tooltipOpen && !tooltipEl.contains(e.target)) hideTooltip();
         return;
     }
@@ -898,12 +970,11 @@ function handleTipEvent(e) {
     }
 }
 
-// Capture phase sur touchstart ET click pour couvrir desktop + mobile
 document.addEventListener('touchstart', handleTipEvent, { capture: true, passive: false });
 document.addEventListener('click',      handleTipEvent, { capture: true });
 
 function initTooltips() {
-    // Rien à faire — tout est géré par délégation globale en capture
+    // Tout est géré par délégation globale en capture
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -916,4 +987,3 @@ function initTooltips() {
     initTooltips();
     loop();
 })();
-

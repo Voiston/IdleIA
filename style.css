@@ -3,7 +3,7 @@
 
 body {
     margin: 0; padding: 0;
-    background: #05080a;
+    background: #0a0f1a;
     color: #00ff41;
     font-family: 'Consolas', 'Courier New', monospace;
     overflow: hidden;
@@ -21,6 +21,8 @@ body {
     display: block;
     /* Le canvas ne doit pas intercepter les touches UI */
     pointer-events: none;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
 }
 
 /* ── TOP BAR ──────────────────────────────────────────────────────────── */
@@ -33,7 +35,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 0 18px;
-    background: rgba(4,12,4,0.92);
+    background: rgba(10,15,26,0.95);
     border-bottom: 1px solid rgba(0,255,65,0.18);
     pointer-events: none; /* stat display only, pas interactif */
 }
@@ -75,7 +77,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-around;
-    background: rgba(4,12,4,0.75);
+    background: rgba(10,15,26,0.80);
     border-bottom: 1px solid rgba(0,255,65,0.1);
     padding: 0 12px;
     pointer-events: none;
@@ -91,7 +93,7 @@ body {
     position: fixed;
     bottom: 0; left: 0; right: 0;
     z-index: 30;
-    background: rgba(4,12,4,0.97);
+    background: rgba(10,15,26,0.98);
     border-top: 1px solid rgba(0,255,65,0.25);
     border-radius: 16px 16px 0 0;
     transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
@@ -250,6 +252,86 @@ input[type=range]   { width:100%; accent-color:#00ff41; cursor:pointer; height:2
 .market-feedback { margin-left:auto; font-size:12px; color:#00ff41; min-width:70px; text-align:right; }
 .gflops-stock    { font-size:10px; color:rgba(0,255,65,.4); letter-spacing:1px; margin-top:8px; text-align:center; }
 
+/* ── UPGRADES GFLOPS ──────────────────────────────────────────────────── */
+.gflops-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: rgba(100,180,255,.08);
+    border: 1px solid rgba(100,180,255,.25);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+.gflops-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: rgba(100,180,255,.5);
+    text-transform: uppercase;
+}
+.gflops-amount {
+    font-size: 24px;
+    font-weight: bold;
+    color: #64b4ff;
+    text-shadow: 0 0 12px rgba(100,180,255,.4);
+}
+
+.upgrades-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.upgrade-btn {
+    background: rgba(100,150,255,.15);
+    color: #64b4ff;
+    border: 1px solid rgba(100,180,255,.35);
+    padding: 12px;
+    width: 100%;
+    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 8px;
+    font-family: 'Consolas', monospace;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: background .12s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+}
+.upgrade-btn span {
+    font-size: 14px;
+    line-height: 1.2;
+}
+.upgrade-btn small {
+    font-size: 11px;
+    opacity: .6;
+    margin-top: 4px;
+}
+.upgrade-btn:active:not(:disabled) {
+    background: rgba(100,180,255,.25);
+    transform: scale(0.97);
+}
+.upgrade-btn:disabled {
+    opacity: .22;
+    filter: grayscale(1);
+    cursor: not-allowed;
+}
+
+.upgrade-level {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    font-size: 9px;
+    color: rgba(100,180,255,.5);
+    letter-spacing: 1px;
+}
+
 /* ── STATS ────────────────────────────────────────────────────────────── */
 .stats-row {
     display:flex; align-items:center; gap:8px;
@@ -294,7 +376,7 @@ input[type=range]   { width:100%; accent-color:#00ff41; cursor:pointer; height:2
     position: fixed;
     z-index: 9999;
     max-width: 280px;
-    background: rgba(4,18,4,.98);
+    background: rgba(10,18,32,.98);
     border: 1px solid rgba(0,255,65,.5);
     border-radius: 10px;
     padding: 14px 16px;
@@ -331,4 +413,186 @@ input[type=range]   { width:100%; accent-color:#00ff41; cursor:pointer; height:2
     color: rgba(0,255,65,.4);
     text-align: right;
     letter-spacing: 1px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* RESPONSIVE: SMARTPHONE (< 768px)                                       */
+/* ─────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+    
+    /* ── TOP BAR ──────────────────────────────────────────────────────── */
+    #topbar {
+        height: 52px;
+        padding: 0 14px;
+    }
+    .tb-label      { font-size: 9px; }
+    .tb-val        { font-size: 16px; }
+    .tb-title      { font-size: 13px; }
+    .tb-gen        { font-size: 10px; }
+    
+    /* ── MINI HUD ──────────────────────────────────────────────────────── */
+    #mini-hud {
+        top: 52px;
+        height: 36px;
+        padding: 0 10px;
+    }
+    .hud-label  { font-size: 8px; }
+    .hud-val    { font-size: 12px; }
+    .mini-bar   { width: 40px; height: 5px; }
+    
+    /* ── BOTTOM PANEL ─────────────────────────────────────────────────── */
+    #bottom-panel {
+        transform: translateY(calc(100% - 60px));
+    }
+    
+    /* ── TOGGLE HANDLE ────────────────────────────────────────────────── */
+    #panel-toggle {
+        height: 60px;
+        font-size: 13px;
+        gap: 10px;
+    }
+    .toggle-pip  { width: 36px; height: 4px; }
+    #toggle-arrow { font-size: 12px; }
+    #toggle-label { font-size: 12px; }
+    
+    /* ── TABS ─────────────────────────────────────────────────────────── */
+    #panel-nav {
+        padding: 0 8px;
+        gap: 2px;
+    }
+    .nav-btn {
+        font-size: 11px;
+        padding: 11px 4px;
+    }
+    
+    /* ── PANEL CONTENT ────────────────────────────────────────────────── */
+    #panel-content {
+        padding: 12px 12px 24px;
+    }
+    
+    /* ── HELPERS ──────────────────────────────────────────────────────── */
+    .row-2  { gap: 10px; margin-bottom: 10px; }
+    .mt8    { margin-top: 10px; }
+    .ml     { margin-left: 10px; }
+    
+    /* ── BUTTONS ──────────────────────────────────────────────────────── */
+    .btn {
+        padding: 13px 10px;
+        min-height: 62px;
+    }
+    .btn span  { font-size: 13px; }
+    .btn small { font-size: 10px; margin-top: 4px; }
+    
+    /* ── SLIDER ───────────────────────────────────────────────────────── */
+    .slider-group {
+        padding: 11px 12px;
+        margin-bottom: 10px;
+    }
+    .slider-group label { font-size: 11px; margin-bottom: 7px; }
+    input[type=range]   { height: 24px; }
+    
+    .evol-info { font-size: 10px; padding: 8px; margin-top: 6px; line-height: 1.6; }
+    
+    /* ── SKILL GRID ───────────────────────────────────────────────────── */
+    .skill-grid { gap: 10px; }
+    
+    /* ── MARKET ───────────────────────────────────────────────────────── */
+    .market-info {
+        gap: 8px;
+        margin-bottom: 8px;
+        padding: 7px 10px;
+    }
+    .market-label    { font-size: 9px; }
+    .market-rate-val { font-size: 16px; }
+    .market-feedback { font-size: 10px; min-width: 60px; }
+    .gflops-stock    { font-size: 9px; margin-top: 6px; }
+    
+    /* ── UPGRADES GFLOPS ──────────────────────────────────────────────── */
+    .gflops-display {
+        gap: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    .gflops-label {
+        font-size: 8px;
+    }
+    .gflops-amount {
+        font-size: 20px;
+    }
+    
+    .upgrades-grid {
+        gap: 10px;
+    }
+    
+    .upgrade-btn {
+        padding: 11px;
+        min-height: 58px;
+    }
+    .upgrade-btn span {
+        font-size: 12px;
+    }
+    .upgrade-btn small {
+        font-size: 10px;
+        margin-top: 3px;
+    }
+    
+    /* ── STATS ────────────────────────────────────────────────────────── */
+    .stats-row {
+        font-size: 11px;
+        margin-bottom: 8px;
+        padding: 7px 10px;
+    }
+    .stat-lbl    { font-size: 8px; }
+    .section-lbl { font-size: 8px; margin: 8px 0 5px; }
+    #fitness-graph {
+        height: 50px;
+    }
+    .dna-bar-wrap  { height: 6px; margin-top: 4px; }
+    
+    /* ── TOOLTIPS ─────────────────────────────────────────────────────── */
+    .tip-icon {
+        width: 14px;
+        height: 14px;
+        font-size: 9px;
+        margin-left: 4px;
+    }
+    
+    #tooltip {
+        max-width: 260px;
+        padding: 12px 14px;
+    }
+    #tooltip-title {
+        font-size: 11px;
+        margin-bottom: 5px;
+    }
+    #tooltip-body {
+        font-size: 10px;
+        line-height: 1.5;
+    }
+    #tooltip-close {
+        margin-top: 8px;
+        font-size: 9px;
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* RESPONSIVE: DESKTOP (>= 768px) - Éviter l'étirement                    */
+/* ─────────────────────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+    #bottom-panel {
+        max-width: 900px;
+        margin: 0 auto;
+        left: 50%;
+        transform: translateX(-50%) translateY(calc(100% - 64px));
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 24px rgba(0,0,0,0.3);
+    }
+    
+    #bottom-panel.expanded {
+        transform: translateX(-50%) translateY(0);
+    }
+    
+    #panel-content {
+        max-width: 100%;
+    }
 }
