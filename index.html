@@ -14,6 +14,13 @@
 
     <canvas id="sim"></canvas>
 
+    <!-- TOOLTIP GLOBAL -->
+    <div id="tooltip">
+        <div id="tooltip-title"></div>
+        <div id="tooltip-body"></div>
+        <span id="tooltip-close">TAP POUR FERMER ✕</span>
+    </div>
+
     <!-- TOP BAR -->
     <div id="topbar">
         <div class="tb-stat">
@@ -66,7 +73,6 @@
 
         <div id="panel-inner">
 
-            <!-- Tabs -->
             <div id="panel-nav">
                 <button class="nav-btn active" data-panel="bots">🤖 BOTS</button>
                 <button class="nav-btn" data-panel="evol">🧬 ÉVOL</button>
@@ -81,18 +87,22 @@
                 <div class="panel active" id="panel-bots">
                     <div class="row-2">
                         <button class="btn" id="buy-pop">
-                            <span>+1 BOT</span><small>COÛT: 1</small>
+                            <span>+1 BOT <i class="tip-icon" data-tip="buy-pop">i</i></span>
+                            <small>COÛT: 1</small>
                         </button>
                         <button class="btn" id="buy-complex">
-                            <span>+INTEL</span><small>COÛT: 20</small>
+                            <span>+INTEL <i class="tip-icon" data-tip="buy-complex">i</i></span>
+                            <small>COÛT: 20</small>
                         </button>
                     </div>
                     <div class="row-2 mt8">
                         <button class="btn btn-prestige-buy" id="btn-prestige">
-                            <span>⬆ PRESTIGE</span><small id="prestige-cost">COÛT: 500</small>
+                            <span>⬆ PRESTIGE <i class="tip-icon" data-tip="prestige">i</i></span>
+                            <small id="prestige-cost">COÛT: 500</small>
                         </button>
                         <button class="btn btn-danger" id="reset-game">
-                            <span>🗑 RESET</span><small>TOUT EFFACER</small>
+                            <span>🗑 RESET</span>
+                            <small>TOUT EFFACER</small>
                         </button>
                     </div>
                 </div>
@@ -101,31 +111,31 @@
                 <div class="panel" id="panel-evol">
                     <div class="slider-group">
                         <label>MUTATION: <span id="mut-val">5</span>%
-                            <span class="param-hint">Chance de modifier un gène</span>
+                            <i class="tip-icon" data-tip="mutation">i</i>
                         </label>
                         <input type="range" id="mut-slider" min="1" max="50" value="5">
                     </div>
                     <div class="slider-group">
                         <label>ÉLITE: <span id="elite-val">20</span>%
-                            <span class="param-hint">Part de la pop. qui se reproduit</span>
+                            <i class="tip-icon" data-tip="elite">i</i>
                         </label>
                         <input type="range" id="elite-slider" min="5" max="50" value="20" step="5">
                     </div>
                     <div class="slider-group">
                         <label>CROSSOVER: <span id="cross-val">50</span>%
-                            <span class="param-hint">Chance de mélanger 2 parents</span>
+                            <i class="tip-icon" data-tip="crossover">i</i>
                         </label>
                         <input type="range" id="cross-slider" min="0" max="100" value="50" step="10">
                     </div>
                     <div class="slider-group">
                         <label>ÉLITISME: <span id="elitism-val">0</span> bots
-                            <span class="param-hint">Copies exactes des meilleurs (0 = désactivé)</span>
+                            <i class="tip-icon" data-tip="elitism">i</i>
                         </label>
                         <input type="range" id="elitism-slider" min="0" max="10" value="0" step="1">
                     </div>
                     <div class="slider-group">
                         <label>PRESSION: <span id="pressure-val">1.0</span>×
-                            <span class="param-hint">Force de sélection des meilleurs</span>
+                            <i class="tip-icon" data-tip="pressure">i</i>
                         </label>
                         <input type="range" id="pressure-slider" min="10" max="40" value="10" step="5">
                     </div>
@@ -147,18 +157,22 @@
                     <div class="market-info">
                         <span class="market-label">TAUX ACTUEL</span>
                         <span id="market-rate" class="market-rate-val">1.00x</span>
+                        <i class="tip-icon" data-tip="market-rate">i</i>
                         <span id="market-feedback" class="market-feedback"></span>
                     </div>
                     <div class="row-2">
                         <button class="btn btn-market" id="btn-sell-gflops">
-                            <span>VENDRE</span><small>GFLOPS→DATA</small>
+                            <span>VENDRE <i class="tip-icon" data-tip="sell-gflops">i</i></span>
+                            <small>GFLOPS→DATA</small>
                         </button>
                         <button class="btn btn-market" id="btn-buy-gflops">
-                            <span>ACHETER</span><small>DATA→GFLOPS</small>
+                            <span>ACHETER <i class="tip-icon" data-tip="buy-gflops">i</i></span>
+                            <small>DATA→GFLOPS</small>
                         </button>
                     </div>
                     <div class="gflops-stock">
                         GFLOPS STOCKÉS: <span id="gflops-stored">0</span>
+                        <i class="tip-icon" data-tip="gflops-stock">i</i>
                     </div>
                 </div>
 
@@ -173,12 +187,17 @@
                         <span class="stat-lbl ml">NIVEAU</span><span id="level-display2">1</span>
                     </div>
                     <div class="stats-row">
-                        <span class="stat-lbl">FITNESS MOY.</span><span id="avg-fitness">—</span>
-                        <span class="stat-lbl ml">MEILLEUR</span><span id="best-fitness">—</span>
+                        <span class="stat-lbl">FITNESS MOY.</span>
+                        <span id="avg-fitness">—</span>
+                        <i class="tip-icon" data-tip="fitness">i</i>
+                        <span class="stat-lbl ml">MEILLEUR</span>
+                        <span id="best-fitness">—</span>
                     </div>
                     <div class="section-lbl">FITNESS / GÉNÉRATION</div>
                     <canvas id="fitness-graph" width="340" height="55"></canvas>
-                    <div class="section-lbl">DIVERSITÉ ADN — <span id="dna-diversity">0%</span></div>
+                    <div class="section-lbl">DIVERSITÉ ADN — <span id="dna-diversity">0%</span>
+                        <i class="tip-icon" data-tip="diversity">i</i>
+                    </div>
                     <div class="dna-bar-wrap"><div class="dna-bar-fill2" id="dna-bar-fill2"></div></div>
                 </div>
 

@@ -82,7 +82,7 @@ const SKILLS={
 // GAME STATE
 // ─────────────────────────────────────────────────────────────────────────────
 const GS_DEF={
-    data:0, gflopsAccum:0, popSize:6, complexity:1, mutationRate:.05,
+    data:0, gflopsAccum:0, popSize:5, complexity:1, mutationRate:.05,
     generation:1, purchasedPop:0, purchasedIntel:0,
     skillLevels:{speed:0,memory:0,resistance:0,sensors:0},
     prestige:0, prestigeMultiplier:1, marketRate:1.0,
@@ -286,7 +286,7 @@ function updateAQ(now){
 // ─────────────────────────────────────────────────────────────────────────────
 // RUNTIME
 // ─────────────────────────────────────────────────────────────────────────────
-const LIFESPAN=900;
+const LIFESPAN=600;
 let   fc=0;
 const target={x:0,y:0,baseX:0,angle:0};
 let   workers=[],numW=2;
@@ -391,8 +391,7 @@ function evolve(){
     // Élitisme : copier les N meilleurs tels quels (sans mutation)
     const survivorCount=Math.min(gs.elitismCount, elite.length, n);
     const survivors=elite.slice(0,survivorCount).map(d=>{
-        const s=createDot([...d.dna]);
-        // Les survivants gardent leur fitness pour l'affichage mais repartent de la base
+        const s=createDot(d.dna.map(g=>({a:g.a,f:g.f})));
         return s;
     });
 
@@ -713,8 +712,10 @@ function syncSliders(){
 // ─────────────────────────────────────────────────────────────────────────────
 for(const id of Object.keys(SKILLS)){
     const btn=document.getElementById('skill-'+id);if(!btn)continue;
-    btn.innerHTML='<span></span><small></small>';
-    btn.addEventListener('click',()=>{
+    btn.innerHTML=`<span></span><small></small><i class="tip-icon" data-tip="skill-${id}" style="position:absolute;top:5px;right:5px;">i</i>`;
+    btn.style.position='relative';
+    btn.addEventListener('click',e=>{
+        if(e.target.classList.contains('tip-icon')) return; // handled by delegation
         const lvl=gs.skillLevels[id]||0,cost=skillCost(id);
         if(lvl<SKILLS[id].maxLevel&&gs.data>=cost){
             gs.data-=cost;gs.skillLevels[id]=lvl+1;save();updateUI();
@@ -769,11 +770,175 @@ document.getElementById('reset-game').addEventListener('click',()=>{
 function save(){localStorage.setItem('burner_v6',JSON.stringify(gs));}
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TOOLTIP SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+const TIPS = {
+    'buy-pop': {
+        title: '+1 BOT',
+        body: 'Ajoute un bot à ta population. Plus tu as de bots, plus tu explores de trajectoires en parallèle et plus tu collectes de DATA à chaque génération.\n\nLe coût augmente à chaque achat.',
+    },
+    'buy-complex': {
+        title: '+INTELLIGENCE',
+        body: 'Augmente la force d\'attraction magnétique vers la cible. Les bots convergent plus directement au lieu d\'explorer au hasard.\n\nUtile quand les bots semblent ne pas savoir où aller.',
+    },
+    'prestige': {
+        title: '⬆ PRESTIGE',
+        body: 'Réinitialise ta progression (bots, intel, data) en échange d\'un multiplicateur permanent sur tous les gains de DATA.\n\nLes skills et le niveau actuel sont conservés. À faire quand tu stagnes.',
+    },
+    'mutation': {
+        title: 'TAUX DE MUTATION',
+        body: 'Probabilité qu\'un gène soit remplacé par un gène aléatoire lors de la reproduction.\n\n🔼 Élevé → exploration large, évolution rapide mais instable.\n🔽 Faible → exploitation fine des bonnes trajectoires.\n\nValeur conseillée : 3–10%.',
+    },
+    'elite': {
+        title: 'TAILLE DE L\'ÉLITE',
+        body: 'Fraction de la population autorisée à se reproduire. Seuls les meilleurs bots (par fitness) peuvent être parents.\n\n🔼 Élevé → plus de diversité, convergence lente.\n🔽 Faible → sélection stricte, convergence rapide mais risque de blocage.\n\nConseillé : 15–25%.',
+    },
+    'crossover': {
+        title: 'CROSSOVER',
+        body: 'Probabilité de mélanger le DNA de deux parents plutôt que de cloner un seul.\n\nLors d\'un crossover, le DNA est découpé en blocs de 50 gènes alternés entre parent A et parent B.\n\n🔼 Élevé → recombinaison génétique forte, bon pour les niveaux complexes.\n🔽 Faible → clonage pur + mutation, plus stable.',
+    },
+    'elitism': {
+        title: 'ÉLITISME',
+        body: 'Nombre de bots copiés exactement dans la génération suivante sans aucune mutation.\n\nGarantit que les meilleurs individus ne sont jamais perdus — la fitness ne peut que stagner ou progresser.\n\n⚠️ Avec une petite population, trop d\'élitisme réduit la diversité.',
+    },
+    'pressure': {
+        title: 'PRESSION DE SÉLECTION',
+        body: 'Contrôle à quel point les meilleurs élites sont favorisés lors du tirage des parents.\n\n× 1.0 → distribution équilibrée, tous les élites ont des chances proches.\n× 4.0 → le 1er bot représente ~50% des tirages.\n\nFonctionne sur le rang, pas la fitness brute.',
+    },
+    'market-rate': {
+        title: 'TAUX DU MARCHÉ',
+        body: 'Le taux de conversion entre GFLOPS et DATA fluctue toutes les 8 secondes.\n\nVends quand le taux est élevé (vert/chaud), achète quand il est bas. Le taux varie entre 0.4× et 2.6×.',
+    },
+    'sell-gflops': {
+        title: 'VENDRE DES GFLOPS',
+        body: 'Convertit tes GFLOPS accumulés en DATA au taux du marché actuel.\n\nLes GFLOPS sont générés automatiquement à chaque seconde en fonction de la puissance de calcul des workers.',
+    },
+    'buy-gflops': {
+        title: 'ACHETER DES GFLOPS',
+        body: 'Dépense de la DATA pour obtenir des GFLOPS au taux actuel.\n\nUtile quand le taux est favorable et que tu prévois de revendre plus tard à un meilleur taux.',
+    },
+    'gflops-stock': {
+        title: 'GFLOPS STOCKÉS',
+        body: 'Quantité de GFLOPS accumulés et disponibles à la vente.\n\nIls s\'accumulent automatiquement chaque seconde. Vends-les via le bouton VENDRE pour les convertir en DATA.',
+    },
+    'fitness': {
+        title: 'FITNESS',
+        body: 'Score mesurant la qualité d\'un bot :\n\n• Bot vivant : 1 / (meilleure distance atteinte + 1)\n• Bot arrivé à la cible : 2 à 4 selon la vitesse\n• Bot mort : −1 (exclu de la reproduction)\n\nPlus le score est élevé, plus le bot a de chances d\'être parent.',
+    },
+    'diversity': {
+        title: 'DIVERSITÉ ADN',
+        body: 'Mesure à quel point les bots ont des DNA différents entre eux (échantillon de 8 bots, 40 gènes).\n\n🔼 Haute → population variée, exploration large.\n🔽 Basse → convergence vers une solution, risque de blocage local.\n\nUne diversité qui chute à 0% signale souvent qu\'il faut augmenter la mutation.',
+    },
+};
+
+// Skills : générés dynamiquement depuis SKILLS
+Object.entries(SKILLS).forEach(([id, sk]) => {
+    TIPS['skill-' + id] = {
+        title: sk.label,
+        body: sk.desc + (id === 'speed'
+            ? '\n\nMultiplie la vitesse de déplacement des bots. Chaque niveau ajoute +30% à la vitesse de base. Au niveau max (5) les bots se déplacent 2.5× plus vite.'
+            : id === 'memory'
+            ? '\n\nDouble la longueur de la séquence ADN. Plus de gènes = trajectoires plus complexes et précises, mais aussi plus de mémoire et de temps de calcul.'
+            : id === 'resistance'
+            ? '\n\nRéduit le taux de mutation effectif de 15% par niveau. Stabilise les bonnes trajectoires découvertes en limitant les modifications aléatoires au DNA.'
+            : '\n\nAjoute une force de répulsion quand les bots approchent d\'un obstacle (rayon 90px). Permet d\'éviter les murs automatiquement sans attendre l\'évolution.'),
+    };
+});
+
+const tooltipEl    = document.getElementById('tooltip');
+const tooltipTitle = document.getElementById('tooltip-title');
+const tooltipBody  = document.getElementById('tooltip-body');
+let   tooltipOpen  = false;
+
+function showTooltip(key, anchorEl) {
+    const tip = TIPS[key]; if (!tip) return;
+    tooltipTitle.innerText = tip.title;
+    tooltipBody.innerText  = tip.body;
+
+    // Position : essaie au-dessus de l'élément, sinon en-dessous
+    tooltipEl.style.opacity = '0';
+    tooltipEl.style.display = 'block';
+    tooltipEl.classList.remove('visible');
+
+    const rect   = anchorEl.getBoundingClientRect();
+    const tw     = Math.min(240, window.innerWidth - 24);
+    let   left   = rect.left + rect.width / 2 - tw / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
+
+    // Préfère au-dessus
+    const spaceAbove = rect.top;
+    const tipH = 160; // hauteur estimée
+    let top;
+    if (spaceAbove > tipH + 8) {
+        top = rect.top - tipH - 8;
+    } else {
+        top = rect.bottom + 8;
+    }
+    top = Math.max(8, Math.min(top, window.innerHeight - tipH - 8));
+
+    tooltipEl.style.width  = tw + 'px';
+    tooltipEl.style.left   = left + 'px';
+    tooltipEl.style.top    = top + 'px';
+
+    requestAnimationFrame(() => tooltipEl.classList.add('visible'));
+    tooltipOpen = true;
+}
+
+function hideTooltip() {
+    tooltipEl.classList.remove('visible');
+    tooltipOpen = false;
+}
+
+// Fermer au tap sur le tooltip lui-même
+tooltipEl.addEventListener('click', hideTooltip);
+// Fermer au tap ailleurs
+document.addEventListener('touchstart', e => {
+    if (tooltipOpen && !tooltipEl.contains(e.target) && !e.target.classList.contains('tip-icon')) {
+        hideTooltip();
+    }
+}, {passive: true});
+document.addEventListener('mousedown', e => {
+    if (tooltipOpen && !tooltipEl.contains(e.target) && !e.target.classList.contains('tip-icon')) {
+        hideTooltip();
+    }
+});
+
+// Attacher les écouteurs sur toutes les icônes ⓘ
+function initTooltips() {
+    document.querySelectorAll('.tip-icon').forEach(icon => {
+        const key = icon.dataset.tip;
+
+        // Tap simple sur l'icône → affiche tooltip
+        icon.addEventListener('click', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (tooltipOpen && tooltipTitle.innerText === (TIPS[key]?.title || '')) {
+                hideTooltip();
+            } else {
+                showTooltip(key, icon);
+            }
+        });
+    });
+
+    // Skills : icône ⓘ sur chaque bouton skill (injectée dynamiquement)
+    // Les skills sont générés après, donc on délègue
+    document.getElementById('panel-skills').addEventListener('click', e => {
+        if (!e.target.classList.contains('tip-icon')) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const key = e.target.dataset.tip;
+        if (key) showTooltip(key, e.target);
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BOOT
 // ─────────────────────────────────────────────────────────────────────────────
 (async()=>{
     numW=await autoWorkers();
     syncSliders();
     setup();
+    initTooltips();
     loop();
 })();
+

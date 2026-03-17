@@ -267,3 +267,67 @@ input[type=range]   { width:100%; accent-color:#00ff41; cursor:pointer; height:2
 }
 .dna-bar-wrap  { height:7px; background:rgba(0,0,0,.5); border:1px solid #003a0f; border-radius:3px; overflow:hidden; margin-top:4px; }
 .dna-bar-fill2 { height:100%; width:0%; background:linear-gradient(90deg,#003a0f,#00ff41); border-radius:3px; transition:width .5s; }
+
+/* ── TOOLTIPS ─────────────────────────────────────────────────────────── */
+.tip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: rgba(0,255,65,.15);
+    border: 1px solid rgba(0,255,65,.3);
+    color: rgba(0,255,65,.7);
+    font-size: 9px;
+    font-style: normal;
+    cursor: pointer;
+    margin-left: 5px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: background .15s;
+}
+.tip-icon:active { background: rgba(0,255,65,.3); }
+
+#tooltip {
+    position: fixed;
+    z-index: 500;
+    max-width: 240px;
+    background: rgba(4,18,4,.97);
+    border: 1px solid rgba(0,255,65,.4);
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.7), 0 0 12px rgba(0,255,65,.1);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity .18s ease, transform .18s ease;
+}
+#tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+}
+#tooltip-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #00ff41;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+    text-shadow: 0 0 6px rgba(0,255,65,.4);
+}
+#tooltip-body {
+    font-size: 10px;
+    color: rgba(255,255,255,.75);
+    line-height: 1.55;
+}
+#tooltip-close {
+    display: block;
+    margin-top: 8px;
+    font-size: 9px;
+    color: rgba(0,255,65,.4);
+    text-align: right;
+    letter-spacing: 1px;
+}
